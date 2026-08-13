@@ -299,8 +299,9 @@ vec2 mapS(vec3 p){
     fieldParams(cell, open, h, hs, ph, variant, off, exist, fmat);
     if(exist > 0.5){
       vec3 rel = vec3(lc.x - off.x, p.y, lc.y - off.y);
-      vec2 dt = tulipSDF(rel, 1.0, open, h, hs, ph, 0.8, 0.0);
-      if(dt.x < res.x) res.x = dt.x;
+      float d = min(sdSeg(rel, vec3(0.0), vec3(0.0,h,0.0), 0.045, 0.030),
+                    length(rel - vec3(0.0, h+0.16*hs, 0.0)) - 0.24*hs);
+      if(d < res.x) res.x = d;
     }
   }
   for(int i=0;i<NT;i++){
@@ -310,15 +311,16 @@ vec2 mapS(vec3 p){
     float g, open, h, hs, ph, nod, hmat; vec3 top;
     heroParams(i, g, open, h, top, hs, ph, nod, hmat);
     if(g < 0.015) continue;
-    vec2 dt = tulipSDF(rel, g, open, h, hs, ph, 1.0, nod);
-    if(dt.x < res.x) res.x = dt.x;
+    float d = min(sdSeg(rel, vec3(0.0), vec3(0.0,h,0.0), 0.042, 0.026),
+                  length(rel - vec3(0.0, h+0.16*hs, 0.0)) - 0.26*hs);
+    if(d < res.x) res.x = d;
   }
   return res;
 }
 
 vec2 march(vec3 ro, vec3 rd){
   float t = 0.0, m = -1.0;
-  for(int i=0;i<176;i++){
+  for(int i=0;i<150;i++){
     vec3 pos = ro + rd*t;
     vec2 h = map(pos);
     if(h.x < 0.001*t + 0.0005){ m = h.y; break; }
@@ -603,11 +605,27 @@ void main(){
   var canvas = document.getElementById('gl');
   var gl = canvas.getContext('webgl2', {antialias:false, alpha:false, depth:false,
                                         powerPreference:'high-performance'});
+  var glLog = [];
   function showFallback(){
     document.getElementById('fallback').style.display = 'flex';
     document.getElementById('nameWrap').style.display = 'none';
     canvas.style.display = 'none';
     window.__ready = true;
+    if(params.get('debug') === '1'){
+      var pre = document.createElement('pre');
+      pre.style.cssText = 'position:fixed;left:2vw;bottom:2vh;right:2vw;max-height:44vh;overflow:auto;z-index:99;'+
+        'background:rgba(0,0,0,.75);color:#9fe6a0;font:11px/1.5 monospace;padding:12px;border-radius:8px;white-space:pre-wrap;';
+      var info = 'no-webgl2';
+      try{
+        if(gl){
+          var ext = gl.getExtension('WEBGL_debug_renderer_info');
+          info = (ext ? gl.getParameter(ext.UNMASKED_RENDERER_WEBGL) : gl.getParameter(gl.RENDERER)) +
+                 ' | ' + gl.getParameter(gl.VERSION);
+        }
+      }catch(e){ info = 'gpu-info-error: ' + e; }
+      pre.textContent = 'RENDERER: ' + info + '\n\n' + (glLog.join('\n\n') || '(no shader log captured)');
+      document.body.appendChild(pre);
+    }
   }
   if(!gl){ showFallback(); return; }
 
@@ -615,7 +633,8 @@ void main(){
     var s = gl.createShader(type);
     gl.shaderSource(s, src); gl.compileShader(s);
     if(!gl.getShaderParameter(s, gl.COMPILE_STATUS)){
-      console.error(gl.getShaderInfoLog(s));
+      var log = (type === gl.VERTEX_SHADER ? 'VERTEX: ' : 'FRAGMENT: ') + gl.getShaderInfoLog(s);
+      glLog.push(log); console.error(log);
       return null;
     }
     return s;
@@ -627,7 +646,8 @@ void main(){
   var prog = gl.createProgram();
   gl.attachShader(prog, vs); gl.attachShader(prog, fs); gl.linkProgram(prog);
   if(!gl.getProgramParameter(prog, gl.LINK_STATUS)){
-    console.error(gl.getProgramInfoLog(prog)); showFallback(); return;
+    glLog.push('LINK: ' + gl.getProgramInfoLog(prog));
+    console.error(glLog[glLog.length-1]); showFallback(); return;
   }
   var U = {};
   ['uRes','uTime','uBloom','uMouse'].forEach(function(n){ U[n] = gl.getUniformLocation(prog, n); });
@@ -656,6 +676,7 @@ void main(){
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
     gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
     gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, sceneTex, 0);
+    if(gl.checkFramebufferStatus(gl.FRAMEBUFFER) !== gl.FRAMEBUFFER_COMPLETE) progPost = null;
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
   }
 
