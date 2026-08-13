@@ -123,6 +123,12 @@ float noise2(vec2 p){
              mix(hash2(i+vec2(0,1)),hash2(i+vec2(1,1)),f.x), f.y);
 }
 
+float fbm(vec2 p){
+  float a=0.5, r=0.0;
+  for(int i=0;i<4;i++){ r += a*noise2(p); p = p*2.03 + 11.7; a *= 0.5; }
+  return r;
+}
+
 float sdEllipsoid(vec3 p, vec3 r){
   float k0=length(p/r);
   float k1=length(p/(r*r));
@@ -299,14 +305,26 @@ float calcAO(vec3 p, vec3 n){
 
 vec3 skyColor(vec3 rd){
   float t = clamp(rd.y*0.5+0.5, 0.0, 1.0);
-  vec3 col = mix(vec3(0.98,0.52,0.34), vec3(0.19,0.08,0.26), pow(t, 0.70));
-  col = mix(col, vec3(1.00,0.72,0.42), pow(clamp(1.0-abs(rd.y*2.2),0.0,1.0), 5.0)*0.6);
+  float sunAz = clamp(dot(normalize(rd.xz+vec2(1e-4,0.0)), normalize(SUN.xz))*0.5+0.5, 0.0, 1.0);
+  vec3 col = mix(vec3(0.94,0.55,0.38), vec3(0.20,0.09,0.27), pow(t, 0.62));
+  // horizon glow, strongest toward the sun
+  col = mix(col, vec3(1.00,0.72,0.44),
+            pow(clamp(1.0-abs(rd.y*2.6),0.0,1.0), 6.0)*(0.25+0.50*pow(sunAz,3.0)));
   float s = clamp(dot(rd, SUN), 0.0, 1.0);
-  col += vec3(1.0,0.65,0.38)*pow(s,140.0)*3.0;
-  col += vec3(1.0,0.55,0.32)*pow(s, 10.0)*0.30;
-  col += vec3(1.0,0.80,0.60)*pow(s,  3.0)*0.055;
-  float cl = noise2(rd.xz/max(rd.y,0.05)*1.4 + vec2(uTime*0.008, 0.0));
-  col += vec3(0.9,0.5,0.5)*cl*0.06*smoothstep(0.02,0.3,rd.y);
+  col += vec3(1.0,0.62,0.35)*pow(s,160.0)*3.5;
+  col += vec3(1.0,0.55,0.32)*pow(s, 12.0)*0.28;
+  // streaky dusk clouds, lit warm on the sun side
+  vec2 cuv = rd.xz/(rd.y+0.18)*0.55;
+  float cd = fbm(cuv*vec2(1.0,2.3) + vec2(uTime*0.006, 0.0));
+  float ca = smoothstep(0.52, 0.85, cd) * smoothstep(0.02, 0.18, rd.y) * 0.5;
+  vec3 ccol = mix(vec3(0.38,0.21,0.38), vec3(1.02,0.60,0.45),
+                  pow(sunAz,2.0)*(0.35+0.65*smoothstep(0.4,0.05,rd.y)));
+  col = mix(col, ccol, ca);
+  // far hill line on the horizon
+  float az = atan(rd.x, -rd.z);
+  float hillH = 0.012 + 0.026*noise2(vec2(az*2.3+7.1, 3.7)) + 0.012*noise2(vec2(az*6.4, 9.2));
+  float hill = smoothstep(hillH, hillH-0.012, rd.y);
+  col = mix(col, mix(vec3(0.40,0.22,0.30), col, 0.45), hill*0.85);
   if(rd.y > 0.12){
     vec2 sp = rd.xz/(rd.y+0.4)*22.0;
     vec2 id = floor(sp);
@@ -350,9 +368,16 @@ vec3 render(vec3 ro, vec3 rd){
 
   vec3 alb; float specStr=0.15, specPow=24.0, sssAmt=0.0;
   if(m < 1.5){
-    float n = noise2(pos.xz*3.0)*0.6 + noise2(pos.xz*11.0)*0.4;
-    alb = mix(vec3(0.032,0.040,0.022), vec3(0.085,0.068,0.042), n);
-    specStr = 0.02;
+    float f1 = fbm(pos.xz*0.75+2.7);
+    float f2 = fbm(pos.xz*6.0+13.0);
+    vec3 soil  = mix(vec3(0.060,0.040,0.026), vec3(0.110,0.078,0.046), f2);
+    vec3 grass = mix(vec3(0.028,0.070,0.020), vec3(0.075,0.150,0.045), f2);
+    alb = mix(soil, grass, smoothstep(0.32,0.72,f1));
+    float b0 = fbm(pos.xz*7.0);
+    float bx = fbm(vec2(pos.x+0.06, pos.z)*7.0) - b0;
+    float bz = fbm(vec2(pos.x, pos.z+0.06)*7.0) - b0;
+    N = normalize(N + vec3(-bx, 0.10, -bz)*1.4);
+    specStr = 0.03;
   } else if(m < 2.5){                       // field stem/leaf
     float yt = clamp(pos.y/0.9, 0.0, 1.0);
     alb = mix(vec3(0.045,0.140,0.035), vec3(0.100,0.260,0.080), yt);
@@ -409,10 +434,14 @@ vec3 render(vec3 ro, vec3 rd){
   vec3 hlf = normalize(SUN - rd);
   float spe = pow(clamp(dot(N, hlf), 0.0, 1.0), specPow)*dif;
   col += specStr*spe*sunCol*(0.4+0.6*fres);
-  col += fres*vec3(0.50,0.30,0.45)*0.25*ao*(sssAmt > 0.9 ? 1.0 : 0.3);
+  col += fres*vec3(0.50,0.30,0.45)*0.15*ao*(sssAmt > 0.9 ? 1.0 : 0.3);
 
-  float fo = 1.0 - exp(-0.0095*tm.x*tm.x);
-  col = mix(col, vec3(0.58,0.29,0.30), fo);
+  float sunF = pow(clamp(dot(rd, SUN)*0.5+0.5, 0.0, 1.0), 3.0);
+  vec3 fogCol = mix(vec3(0.44,0.26,0.36), vec3(0.86,0.49,0.37), sunF);
+  float fo = 1.0 - exp(-0.0080*tm.x*tm.x);
+  col = mix(col, fogCol, fo);
+  float mist = (1.0-exp(-0.06*tm.x)) * exp(-max(pos.y, 0.0)*3.0) * 0.15;
+  col = mix(col, fogCol*1.08, clamp(mist, 0.0, 1.0));
   return col;
 }
 
@@ -434,7 +463,13 @@ void main(){
   vec3 rd = normalize(uv.x*rt + uv.y*up + 1.55*fw);
 
   vec3 col = render(ro, rd);
-  col = aces(col*1.06);
+  float sa = clamp(dot(rd, SUN), 0.0, 1.0);
+  col += vec3(1.2,0.75,0.50)*pow(sa, 6.0)*0.09;
+  col += vec3(1.3,0.90,0.65)*pow(sa,40.0)*0.25;
+  col = aces(col*1.10);
+  col = mix(col, col*col*(3.0-2.0*col), 0.24);
+  float lum = dot(col, vec3(0.299,0.587,0.114));
+  col = clamp(mix(vec3(lum), col, 1.06), 0.0, 1.0);
   col = pow(col, vec3(1.0/2.2));
 
   vec2 vq = fc/uRes;
