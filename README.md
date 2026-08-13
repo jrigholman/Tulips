@@ -12,7 +12,7 @@ requests).
 
 A minute or two later the garden is live at:
 
-**https://jrigholman.github.io/tulips/**
+**https://jrigholman.github.io/Tulips/**
 
 ## Personalize
 
