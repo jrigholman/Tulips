@@ -113,7 +113,7 @@ const vec4 TD[NT] = vec4[](
 );
 // rise order: centre first, then outward
 const float HORD[NT] = float[](5.0, 3.0, 1.0, 0.0, 2.0, 4.0, 6.0);
-const float SP = 0.95;        // field spacing
+const float SP = 0.85;        // field spacing
 const float FIELD_TOP = 1.25; // nothing in the field reaches above this
 
 const vec3 SUN = normalize(vec3(-0.45, 0.30, -0.80));
@@ -145,26 +145,30 @@ float sdSeg(vec3 p, vec3 a, vec3 b, float r1, float r2){
 }
 
 void heroParams(int i, out float g, out float open, out float h,
-                out vec3 top, out float hs, out float ph){
+                out vec3 top, out float hs, out float ph, out float nod, out float mat){
   vec4 td = TD[i];
   ph   = fract(float(i)*0.618+0.11);
-  g    = smoothstep(0.0,1.0, clamp((uBloom - 0.08 - HORD[i]*0.05)*2.0, 0.0, 1.0));
-  open = smoothstep(0.72, 1.0, g);
-  h    = td.z*(0.10+0.90*g);
+  g    = clamp((uBloom - 0.06 - HORD[i]*0.055)*1.9, 0.0, 1.0);
+  g    = g*g*(3.0-2.0*g);
+  float rise = smoothstep(0.10, 0.80, g);        // leaves sprout before the stem rises
+  open = smoothstep(0.86, 1.0, g);               // petals unfurl only at the very end
+  mat  = smoothstep(0.55, 0.82, g);              // green bud pigments before opening
+  nod  = 1.05*(1.0 - smoothstep(0.42, 0.78, g)); // young bud nods, straightens toward the light
+  h    = td.z*(0.055 + 0.945*rise);
   top  = vec3(td.x, h, td.y);
-  hs   = (0.55+0.45*g)*(0.72+0.30*(td.z/1.9));
+  hs   = (0.30+0.70*smoothstep(0.15, 0.75, g))*(0.72+0.30*(td.z/1.9));
 }
 
 // field tulips: fully grown from the start, buds closed until the bloom wave arrives
 void fieldParams(vec2 cell, out float open, out float h, out float hs,
-                 out float ph, out float variant, out vec2 off, out float exist){
+                 out float ph, out float variant, out vec2 off, out float exist, out float mat){
   float h1 = hash2(cell*1.13+4.7);
   float h2 = hash2(cell*2.31+9.1);
   float h3 = hash2(cell*3.71+17.3);
   exist = step(0.08, h1);
   vec2 cc = cell*SP;
   if(length(cc - vec2(0.0, 2.9)) < 1.35) exist = 0.0;  // clear pocket at the camera
-  off = (vec2(h2, h3)-0.5)*0.26;
+  off = (vec2(h2, h3)-0.5)*0.22;
   ph = h2;
   variant = floor(h3*2.999);
   h  = 0.62 + 0.30*h1;
@@ -172,6 +176,7 @@ void fieldParams(vec2 cell, out float open, out float h, out float hs,
   float r = length(cc);
   float term = uBloom*1.5 - 0.1 - h2*0.3 - clamp(r/9.0, 0.0, 1.0)*0.6;
   open = smoothstep(0.0, 0.35, term);
+  mat  = smoothstep(-0.30, 0.25, term);
 }
 
 // six petals in two rings, blooming with `open`
@@ -186,15 +191,17 @@ float dHead(vec3 q, float open){
     float tilt = mix(-0.06 - ring*0.05, 0.38 + ring*0.22, open);
     w.yz = rot(tilt)*w.yz;
     w.z += mix(0.45, 0.85, open)*w.y*w.y;
+    w.x *= 1.0 + 0.9*smoothstep(0.24, 0.46, w.y);   // taper to a pointed tip
+    w.x += 0.006*sin(w.y*34.0 + float(k)*7.0);      // gently ruffled edge
     float pd = sdEllipsoid(w - vec3(0.0,0.20,0.0),
                            vec3(0.088-0.012*ring, 0.225, 0.015));
-    d = min(d, pd*0.7);
+    d = min(d, pd*0.60);
   }
   return d;
 }
 
 // one tulip in local space; returns (distance, part: 0 stem/leaf, 1 petals, 2 pistil)
-vec2 tulipSDF(vec3 rel, float g, float open, float h, float hs, float ph, float leafScale){
+vec2 tulipSDF(vec3 rel, float g, float open, float h, float hs, float ph, float leafScale, float nod){
   float sw = sin(uTime*0.8 + ph*6.2832)*0.018*g;
   rel.x += sw*rel.y;
   vec3 ltop = vec3(0.0, h, 0.0);
@@ -208,6 +215,12 @@ vec2 tulipSDF(vec3 rel, float g, float open, float h, float hs, float ph, float 
   if(dl < res.x) res = vec2(dl, 0.0);
   vec3 q = (rel - ltop)/hs;
   q.y -= 0.02;
+  if(nod > 0.001){
+    float az = ph*6.2832;
+    q.xz = rot(az)*q.xz;
+    q.yz = rot(-nod)*q.yz;
+    q.xz = rot(-az)*q.xz;
+  }
   float bh = length(q - vec3(0.0,0.2,0.0)) - 0.55;
   if(bh*hs < res.x){
     if(bh > 0.12){
@@ -231,11 +244,11 @@ vec2 map(vec3 p){
     vec2 cell = round(p.xz / SP);
     vec2 lc = p.xz - cell*SP;
     float dEdge = SP*0.5 - max(abs(lc.x), abs(lc.y)) + 0.03;
-    float open, h, hs, ph, variant, exist; vec2 off;
-    fieldParams(cell, open, h, hs, ph, variant, off, exist);
+    float open, h, hs, ph, variant, exist, fmat; vec2 off;
+    fieldParams(cell, open, h, hs, ph, variant, off, exist, fmat);
     if(exist > 0.5){
       vec3 rel = vec3(lc.x - off.x, p.y, lc.y - off.y);
-      vec2 dt = tulipSDF(rel, 1.0, open, h, hs, ph, 0.8);
+      vec2 dt = tulipSDF(rel, 1.0, open, h, hs, ph, 0.8, 0.0);
       if(dt.x <= dEdge){
         if(dt.x < res.x)
           res = vec2(dt.x, dt.y < 0.5 ? 2.0 : (dt.y < 1.5 ? 3.0 + variant : 7.0));
@@ -257,10 +270,10 @@ vec2 map(vec3 p){
       if(bound < res.x) res.x = bound;
       continue;
     }
-    float g, open, h, hs, ph; vec3 top;
-    heroParams(i, g, open, h, top, hs, ph);
-    if(g < 0.02) continue;
-    vec2 dt = tulipSDF(rel, g, open, h, hs, ph, 1.0);
+    float g, open, h, hs, ph, nod, hmat; vec3 top;
+    heroParams(i, g, open, h, top, hs, ph, nod, hmat);
+    if(g < 0.015) continue;
+    vec2 dt = tulipSDF(rel, g, open, h, hs, ph, 1.0, nod);
     if(dt.x < res.x)
       res = vec2(dt.x, dt.y < 0.5 ? 40.0+float(i) : (dt.y < 1.5 ? 20.0+float(i) : 60.0+float(i)));
   }
@@ -344,15 +357,17 @@ vec3 skyColor(vec3 rd){
   return col;
 }
 
-vec3 petalAlbedo(float v, float hgt, float stripe){
+vec3 petalAlbedo(float v, float hgt, float stripe, float mat){
   vec3 deep, light;
   if(v < 0.5)      { deep=vec3(0.48,0.015,0.030); light=vec3(0.92,0.10,0.09); } // scarlet
   else if(v < 1.5) { deep=vec3(0.55,0.040,0.140); light=vec3(0.98,0.30,0.45); } // rose-pink
   else             { deep=vec3(0.72,0.160,0.220); light=vec3(0.99,0.73,0.72); } // blush cream
   vec3 col = mix(deep, light, smoothstep(0.0,1.0,hgt));
-  col = mix(vec3(0.85,0.70,0.16), col, smoothstep(0.03,0.22,hgt)); // warm base
+  col = mix(vec3(0.62,0.52,0.16), col, smoothstep(0.0,0.12,hgt)); // narrow warm base
   col *= 0.92 + 0.08*stripe;
-  return col;
+  vec3 bud = vec3(0.14,0.26,0.09)*(0.7+0.6*hgt);                  // immature green bud
+  // pigment floods from the tip downward, the way real buds color up
+  return mix(bud, col, clamp(mat*1.35 - (1.0-hgt)*0.35, 0.0, 1.0));
 }
 
 vec3 render(vec3 ro, vec3 rd){
@@ -370,13 +385,13 @@ vec3 render(vec3 ro, vec3 rd){
   vec3 N = calcNormal(pos);
   float m = tm.y;
 
-  vec3 alb; float specStr=0.15, specPow=24.0, sssAmt=0.0;
+  vec3 alb; float specStr=0.15, specPow=24.0, sssAmt=0.0, thin=1.0;
   if(m < 1.5){
     float f1 = fbm(pos.xz*0.75+2.7);
     float f2 = fbm(pos.xz*6.0+13.0);
     vec3 soil  = mix(vec3(0.060,0.040,0.026), vec3(0.110,0.078,0.046), f2);
-    vec3 grass = mix(vec3(0.028,0.070,0.020), vec3(0.075,0.150,0.045), f2);
-    alb = mix(soil, grass, smoothstep(0.32,0.72,f1));
+    vec3 grass = mix(vec3(0.024,0.062,0.017), vec3(0.062,0.135,0.040), f2);
+    alb = mix(soil, grass, smoothstep(0.28,0.62,f1));
     float b0 = fbm(pos.xz*7.0);
     float bx = fbm(vec2(pos.x+0.06, pos.z)*7.0) - b0;
     float bz = fbm(vec2(pos.x, pos.z+0.06)*7.0) - b0;
@@ -388,26 +403,28 @@ vec3 render(vec3 ro, vec3 rd){
     specStr = 0.25; specPow = 20.0; sssAmt = 0.35;
   } else if(m < 6.5){                       // field petal
     vec2 cell = round(pos.xz / SP);
-    float open, fh, fhs, fph, variant, exist; vec2 off;
-    fieldParams(cell, open, fh, fhs, fph, variant, off, exist);
+    float open, fh, fhs, fph, variant, exist, fmat; vec2 off;
+    fieldParams(cell, open, fh, fhs, fph, variant, off, exist, fmat);
     vec2 cc = cell*SP;
     vec3 q = (pos - vec3(cc.x+off.x, fh, cc.y+off.y))/fhs;
     float hgt = clamp((q.y-0.02)/0.42, 0.0, 1.0);
     float stripe = 0.5+0.5*sin(atan(q.x, q.z)*15.0 + fph*10.0);
-    alb = petalAlbedo(m-3.0, hgt, stripe);
-    specStr = 0.55; specPow = 36.0; sssAmt = 1.0;
+    alb = petalAlbedo(m-3.0, hgt, stripe, fmat);
+    thin = 0.5+0.9*hgt;
+    specStr = 0.55; specPow = 36.0; sssAmt = mix(0.4, 1.0, fmat);
   } else if(m < 7.5){                       // field pistil
     alb = vec3(0.06,0.035,0.015);
     specStr = 0.3;
   } else if(m < 40.0){                      // hero petal
     int i = int(m - 20.0 + 0.5);
-    float g, open, hh, hhs, hph; vec3 top;
-    heroParams(i, g, open, hh, top, hhs, hph);
+    float g, open, hh, hhs, hph, hnod, hmat; vec3 top;
+    heroParams(i, g, open, hh, top, hhs, hph, hnod, hmat);
     vec3 q = (pos - top)/hhs; q.y -= 0.02;
     float hgt = clamp(q.y/0.42, 0.0, 1.0);
     float stripe = 0.5+0.5*sin(atan(q.x, q.z)*15.0 + hph*10.0);
-    alb = petalAlbedo(TD[i].w, hgt, stripe);
-    specStr = 0.55; specPow = 36.0; sssAmt = 1.0;
+    alb = petalAlbedo(TD[i].w, hgt, stripe, hmat);
+    thin = 0.5+0.9*hgt;
+    specStr = 0.55; specPow = 36.0; sssAmt = mix(0.4, 1.0, hmat);
   } else if(m < 60.0){                      // hero stem/leaf
     float yt = clamp(pos.y/1.6, 0.0, 1.0);
     alb = mix(vec3(0.045,0.140,0.035), vec3(0.100,0.260,0.080), yt);
@@ -432,12 +449,14 @@ vec3 render(vec3 ro, vec3 rd){
   // light transmitted through petals — the sun is behind them at golden hour
   float back = clamp(dot(-N, SUN), 0.0, 1.0);
   vec3 trans = alb*alb*2.2;
-  col += sssAmt * trans * sunCol * pow(back, 1.7) * (0.3+0.7*sh) * 0.8;
+  col += sssAmt * thin * trans * sunCol * pow(back, 1.7) * (0.3+0.7*sh) * 0.8;
 
   float fres = pow(clamp(1.0+dot(N, rd), 0.0, 1.0), 3.0);
   vec3 hlf = normalize(SUN - rd);
   float spe = pow(clamp(dot(N, hlf), 0.0, 1.0), specPow)*dif;
   col += specStr*spe*sunCol*(0.4+0.6*fres);
+  float sheen = pow(clamp(dot(N, hlf), 0.0, 1.0), 7.0)*dif;
+  col += specStr*0.35*sheen*sunCol;
   col += fres*vec3(0.50,0.30,0.45)*0.15*ao*(sssAmt > 0.9 ? 1.0 : 0.3);
 
   float sunF = pow(clamp(dot(rd, SUN)*0.5+0.5, 0.0, 1.0), 3.0);
@@ -549,7 +568,7 @@ void main(){
   start(isNaN(jumpT) ? 0 : jumpT);
 
   var reveals = [
-    [7.5, 'nameWrap']
+    [9.0, 'nameWrap']
   ];
   var revealed = 0;
   function smooth(x){ x = Math.min(Math.max(x,0),1); return x*x*(3-2*x); }
@@ -599,7 +618,7 @@ void main(){
     }
 
     var bt = started ? now - bloomStart : 0;
-    var bloom = smooth((bt - 0.5)/11.0);
+    var bloom = smooth((bt - 0.5)/13.0);
 
     while(revealed < reveals.length && bt >= reveals[revealed][0]){
       var r = reveals[revealed++];
@@ -607,7 +626,7 @@ void main(){
                     : document.querySelector('.line.'+r[2]);
       if(el) el.classList.add('show');
     }
-    if(!reduceMotion && bt > 7.0 && nowMs - lastPetal > 620){
+    if(!reduceMotion && bt > 8.5 && nowMs - lastPetal > 620){
       lastPetal = nowMs; spawnPetal();
     }
 
