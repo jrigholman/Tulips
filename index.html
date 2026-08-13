@@ -3,8 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>For Amy 🌷</title>
-<meta name="description" content="A garden of ray-traced tulips, grown from light for Amy.">
+<title>Amy 🌷</title>
+<meta name="description" content="For Amy 🌷">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E🌷%3C/text%3E%3C/svg%3E">
 <style>
 /* ---- embedded fonts (self-contained: works offline, no CDN) ---- */
@@ -46,58 +46,11 @@ body{
     0 0 140px rgba(255, 80,120,.30),
     0 2px 4px rgba(60,10,30,.35);
 }
-#nameSub{
-  display:block; margin-top:-.15em;
-  font-family:'Cormorant Garamond', Georgia, serif; font-style:italic;
-  font-size:clamp(14px, 2.2vw, 20px); letter-spacing:.34em; text-transform:lowercase;
-  color:var(--blush); opacity:.95; text-shadow:0 1px 3px rgba(40,5,25,.9), 0 0 16px rgba(70,10,40,.8);
-}
-
-/* ---- message ---- */
-#msg{
-  position:fixed; left:0; right:0; bottom:5.5vh; z-index:3; text-align:center;
-  pointer-events:none; padding:0 6vw;
-}
-.line{
-  margin:.45em auto; max-width:34em;
-  font-style:italic; font-size:clamp(17px, 2.5vw, 24px); line-height:1.45;
-  color:var(--blush); text-shadow:0 1px 3px rgba(40,5,20,.8), 0 0 24px rgba(255,120,140,.25);
-  opacity:0; transform:translateY(10px); filter:blur(4px);
-  transition:opacity 2.6s ease, transform 2.6s ease, filter 2.6s ease;
-}
-.line.show{opacity:1; transform:none; filter:blur(0)}
-.line.l3{color:var(--gold); font-size:clamp(15px, 2.1vw, 20px); letter-spacing:.12em}
-
-/* ---- intro overlay ---- */
-#intro{
-  position:fixed; inset:0; z-index:10; display:flex; align-items:center; justify-content:center;
-  background:radial-gradient(120vmax 120vmax at 50% 62%, #37112a 0%, #200a1c 45%, #0d0410 100%);
-  transition:opacity 1.4s ease; text-align:center;
-}
-#intro.hide{opacity:0; pointer-events:none}
-.intro-pre{
-  font-style:italic; letter-spacing:.28em; font-size:clamp(13px,2vw,17px);
-  color:var(--blush); opacity:.75; margin-bottom:1.4em;
-}
 .intro-name{
   font-family:'Great Vibes', cursive; font-size:clamp(56px, 11vw, 110px);
   color:var(--ivory); text-shadow:0 0 30px rgba(255,140,150,.5), 0 0 90px rgba(255,90,120,.35);
   margin-bottom:.55em;
 }
-#bloomBtn{
-  pointer-events:auto; cursor:pointer; margin-top:1.2em;
-  font-family:'Cormorant Garamond', Georgia, serif; font-style:italic;
-  font-size:clamp(17px, 2.4vw, 22px); letter-spacing:.18em;
-  color:var(--ivory); background:rgba(255,160,170,.06);
-  border:1px solid rgba(255,190,200,.45); border-radius:999px; padding:.8em 2.2em;
-  box-shadow:0 0 24px rgba(255,120,140,.18), inset 0 0 18px rgba(255,150,160,.08);
-  transition:box-shadow .5s ease, background .5s ease, transform .5s ease;
-}
-#bloomBtn:hover{
-  background:rgba(255,160,170,.14); transform:translateY(-2px);
-  box-shadow:0 0 44px rgba(255,130,150,.4), inset 0 0 24px rgba(255,150,160,.16);
-}
-
 /* ---- drifting petals ---- */
 #petals{position:fixed; inset:0; pointer-events:none; z-index:2; overflow:hidden}
 .petal{
@@ -107,14 +60,6 @@ body{
   box-shadow:0 0 8px rgba(255,120,140,.35);
   will-change:transform, opacity; opacity:0;
 }
-
-/* ---- tiny hint ---- */
-#hint{
-  position:fixed; right:2.2vh; bottom:2.2vh; z-index:3; pointer-events:none;
-  font-style:italic; font-size:13px; letter-spacing:.14em; color:rgba(255,215,220,.0);
-  transition:color 2s ease;
-}
-#hint.show{color:rgba(255,215,220,.45)}
 
 /* ---- fallback (no WebGL2) ---- */
 #fallback{
@@ -132,33 +77,12 @@ body{
 
 <div id="nameWrap">
   <h1 id="name">Amy</h1>
-  <span id="nameSub">these bloomed the moment you arrived</span>
-</div>
-
-<!-- ✏️ Edit your message to her here -->
-<div id="msg">
-  <p class="line l1">I couldn't put real tulips in your hands from across the world…</p>
-  <p class="line l2">so I grew these for you out of pure light — and they will never wilt.</p>
-  <p class="line l3">counting every mile until they're real&nbsp;&nbsp;♥</p>
-</div>
-
-<div id="hint">drag to look around</div>
-
-<div id="intro">
-  <div class="intro-inner">
-    <div class="intro-pre">a little garden, grown across the world</div>
-    <div class="intro-name">for Amy</div>
-    <div><button id="bloomBtn">let it bloom&nbsp;&nbsp;🌷</button></div>
-  </div>
 </div>
 
 <div id="fallback">
   <div>
     <div class="intro-name">Amy</div>
     <div class="tulips">🌷 🌷 🌷 🌷 🌷</div>
-    <p class="line l1 show">I couldn't put real tulips in your hands from across the world…</p>
-    <p class="line l2 show">so here is a whole garden that will never wilt.</p>
-    <p class="line l3 show">counting every mile until they're real&nbsp;&nbsp;♥</p>
   </div>
 </div>
 
@@ -466,9 +390,7 @@ void main(){
                                         powerPreference:'high-performance'});
   function showFallback(){
     document.getElementById('fallback').style.display = 'flex';
-    document.getElementById('intro').classList.add('hide');
     document.getElementById('nameWrap').style.display = 'none';
-    document.getElementById('msg').style.display = 'none';
     canvas.style.display = 'none';
     window.__ready = true;
   }
@@ -512,23 +434,15 @@ void main(){
   // --- timeline ---
   var loadT = performance.now()/1000;
   var started = false, bloomStart = 0;
-  var intro = document.getElementById('intro');
   function start(offset){
     if(started) return;
     started = true;
     bloomStart = performance.now()/1000 - (offset||0);
-    intro.classList.add('hide');
-    setTimeout(function(){ intro.remove(); }, 1500);
   }
-  document.getElementById('bloomBtn').addEventListener('click', function(){ start(0); });
-  if(!isNaN(jumpT)) start(jumpT);
+  start(isNaN(jumpT) ? 0 : jumpT);
 
   var reveals = [
-    [3.4,  'nameWrap'],
-    [7.0,  null, 'l1'],
-    [9.2,  null, 'l2'],
-    [11.6, null, 'l3'],
-    [13.0, 'hint']
+    [3.4, 'nameWrap']
   ];
   var revealed = 0;
   function smooth(x){ x = Math.min(Math.max(x,0),1); return x*x*(3-2*x); }
