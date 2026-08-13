@@ -32,15 +32,18 @@ body{
   font-family:'Cormorant Garamond', Georgia, 'Times New Roman', serif;
   -webkit-font-smoothing:antialiased;
 }
-#gl{position:fixed; inset:0; width:100vw; height:100vh; display:block}
+#gl{position:fixed; inset:0; width:100vw; height:100vh; height:100dvh; display:block}
 
 /* ---- her name ---- */
 #nameWrap{
-  position:fixed; left:0; right:0; top:7vh; text-align:center; pointer-events:none; z-index:3;
-  opacity:0; transform:translateY(12px); filter:blur(6px);
-  transition:opacity 3.2s ease, transform 3.2s ease, filter 3.2s ease;
+  position:fixed; left:0; right:0; top:19vh; text-align:center; pointer-events:none; z-index:3;
+  transform:translateY(-50%);
+  opacity:0; filter:blur(6px);
+  transition:opacity 3.2s ease, filter 3.2s ease;
 }
-#nameWrap.show{opacity:1; transform:none; filter:blur(0)}
+#nameWrap.show{opacity:1; filter:blur(0)}
+#nameWrap #name{transition:transform 3.2s ease; transform:translateY(14px)}
+#nameWrap.show #name{transform:none}
 #name{
   margin:0; font-family:'Great Vibes', 'Snell Roundhand', cursive; font-weight:400;
   font-size:clamp(74px, 17vw, 190px); line-height:1.1; color:var(--ivory);
@@ -540,7 +543,9 @@ void main(){
 
   float an = 0.035*sin(uTime*0.12) + uMouse.x*0.06;
   float cy = 1.38 + 0.04*sin(uTime*0.17) + uMouse.y*0.10;
-  vec3 ro = vec3(3.6*sin(an), cy, 3.6*cos(an));
+  float aspect = uRes.x/uRes.y;
+  float cd = mix(5.1, 3.6, smoothstep(0.75, 1.10, aspect));
+  vec3 ro = vec3(cd*sin(an), cy, cd*cos(an));
   vec3 ta = vec3(0.0, 0.92, 0.0);
   vec3 fw = normalize(ta - ro);
   vec3 rt = normalize(cross(fw, vec3(0.0,1.0,0.0)));
@@ -551,10 +556,10 @@ void main(){
   float sa = clamp(dot(rd, SUN), 0.0, 1.0);
   col += vec3(1.2,0.75,0.50)*pow(sa, 6.0)*0.09;
   col += vec3(1.3,0.90,0.65)*pow(sa,40.0)*0.25;
-  col = aces(col*1.10);
+  col = aces(col*1.13);
   col = mix(col, col*col*(3.0-2.0*col), 0.24);
   float lum = dot(col, vec3(0.299,0.587,0.114));
-  col = clamp(mix(vec3(lum), col, 1.06), 0.0, 1.0);
+  col = clamp(mix(vec3(lum), col, 1.16), 0.0, 1.0);
   col = pow(col, vec3(1.0/2.2));
 
   vec2 vq = fc/uRes;
@@ -690,18 +695,42 @@ void main(){
   }
 
   // --- adaptive resolution ---
-  var scales = [1.0, 0.85, 0.7, 0.58, 0.48, 0.4];
+  var scales = [1.0, 0.85, 0.7, 0.58, 0.48, 0.4, 0.33];
   var level = (Math.min(innerWidth, innerHeight) < 700 || matchMedia('(pointer: coarse)').matches) ? 2 : 0;
   var levelFixed = false;
   if(!isNaN(qParam)){ level = Math.min(Math.max(qParam,0),5); levelFixed = true; }
   var dpr = Math.min(devicePixelRatio || 1, 1.75);
+  try{
+    var extR = gl.getExtension('WEBGL_debug_renderer_info');
+    var rend = String(extR ? gl.getParameter(extR.UNMASKED_RENDERER_WEBGL) : gl.getParameter(gl.RENDERER));
+    if(/swiftshader|llvmpipe|softpipe|software|basic render/i.test(rend)){
+      if(!levelFixed) level = Math.max(level, 4);
+      dpr = 1;
+    }
+  }catch(e){}
   function resize(){
     var s = scales[level]*dpr;
     canvas.width  = Math.max(2, Math.round(innerWidth *s));
     canvas.height = Math.max(2, Math.round(innerHeight*s));
     if(progPost) allocTarget();
   }
-  addEventListener('resize', resize); resize();
+  var nameWrapEl = document.getElementById('nameWrap');
+  function placeName(){
+    var W = innerWidth, H = innerHeight;
+    var a = W/H;
+    var s = Math.min(Math.max((a-0.75)/(1.10-0.75), 0), 1); s = s*s*(3-2*s);
+    var cdist = 5.1 + (3.6-5.1)*s;
+    var roY = 1.38, taY = 0.92;
+    var fY = taY-roY, fZ = -cdist, fL = Math.hypot(fY, fZ);
+    fY /= fL; fZ /= fL;
+    var uY = -fZ, uZ = fY;               // camera up vector (x components are 0)
+    var dy = 1.86-roY, dz = 1.70-cdist;  // world anchor at the heart of the arc
+    var yc = dy*uY + dz*uZ, zc = dy*fY + dz*fZ;
+    nameWrapEl.style.top = (H/2 - (1.55*yc/zc)*H/2) + 'px';
+  }
+  addEventListener('resize', function(){ resize(); placeName(); });
+  if(window.visualViewport) visualViewport.addEventListener('resize', function(){ resize(); placeName(); });
+  resize(); placeName();
 
   // --- timeline ---
   var loadT = performance.now()/1000;
@@ -758,9 +787,10 @@ void main(){
     var dt = nowMs - lastNow; lastNow = nowMs;
     emaDt = emaDt*0.94 + Math.min(dt,100)*0.06;
     frames++;
-    if(!levelFixed && frames % 90 === 0){
-      if(emaDt > 27 && level < scales.length-1){ level++; resize(); }
-      else if(emaDt < 12.5 && level > 0){ level--; resize(); }
+    if(!levelFixed && frames % 30 === 0){
+      if(emaDt > 42 && level < scales.length-2){ level += 2; resize(); }
+      else if(emaDt > 26 && level < scales.length-1){ level++; resize(); }
+      else if(emaDt < 12.5 && level > 0 && frames % 90 === 0){ level--; resize(); }
     }
 
     var bt = started ? now - bloomStart : 0;
@@ -778,6 +808,8 @@ void main(){
 
     mx += (tx-mx)*0.04; my += (ty-my)*0.04;
 
+    var settled = started && (now - bloomStart) > 20.0 && !still;
+    if(settled && (frames & 1) === 1){ window.__ready = true; requestAnimationFrame(tick); return; }
     gl.viewport(0,0,canvas.width,canvas.height);
     if(progPost) gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
     gl.useProgram(prog);
