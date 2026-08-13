@@ -604,7 +604,8 @@ void main(){
 
   var canvas = document.getElementById('gl');
   var gl = canvas.getContext('webgl2', {antialias:false, alpha:false, depth:false,
-                                        powerPreference:'high-performance'});
+                                        powerPreference:'high-performance'})
+        || canvas.getContext('webgl2');
   var glLog = [];
   function showFallback(){
     document.getElementById('fallback').style.display = 'flex';
@@ -616,6 +617,14 @@ void main(){
       pre.style.cssText = 'position:fixed;left:2vw;bottom:2vh;right:2vw;max-height:44vh;overflow:auto;z-index:99;'+
         'background:rgba(0,0,0,.75);color:#9fe6a0;font:11px/1.5 monospace;padding:12px;border-radius:8px;white-space:pre-wrap;';
       var info = 'no-webgl2';
+      if(!gl){
+        try{
+          var c1 = document.createElement('canvas');
+          var g1 = c1.getContext('webgl') || c1.getContext('experimental-webgl');
+          info = g1 ? 'no-webgl2 (but WebGL1 works — browser lacks/blocks WebGL2)'
+                    : 'no-webgl2, no-webgl1 (3D disabled entirely: check hardware acceleration / GPU policy)';
+        }catch(e){ info = 'no-webgl2 (probe error: ' + e + ')'; }
+      }
       try{
         if(gl){
           var ext = gl.getExtension('WEBGL_debug_renderer_info');
