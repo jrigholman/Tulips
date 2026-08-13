@@ -318,14 +318,14 @@ vec2 mapS(vec3 p){
 
 vec2 march(vec3 ro, vec3 rd){
   float t = 0.0, m = -1.0;
-  for(int i=0;i<140;i++){
+  for(int i=0;i<176;i++){
     vec3 pos = ro + rd*t;
     vec2 h = map(pos);
     if(h.x < 0.001*t + 0.0005){ m = h.y; break; }
     t += h.x*0.72;
-    if(t > 24.0) break;
+    if(t > 18.0) break;
   }
-  if(t > 24.0) m = -1.0;
+  if(t > 18.0) m = -1.0;
   return vec2(t, m);
 }
 
