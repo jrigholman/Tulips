@@ -133,6 +133,12 @@ float fbm(vec2 p){
   return r;
 }
 
+// Dutch fields are planted in color bands; band index comes from depth
+float bandVariant(float wz){
+  float band = floor(wz/(SP*5.0));
+  return floor(hash2(vec2(band, 7.3))*2.999);
+}
+
 float sdEllipsoid(vec3 p, vec3 r){
   float k0=length(p/r);
   float k1=length(p/(r*r));
@@ -170,7 +176,8 @@ void fieldParams(vec2 cell, out float open, out float h, out float hs,
   if(length(cc - vec2(0.0, 2.9)) < 1.35) exist = 0.0;  // clear pocket at the camera
   off = (vec2(h2, h3)-0.5)*0.22;
   ph = h2;
-  variant = floor(h3*2.999);
+  variant = bandVariant(cc.y);
+  if(h3 > 0.93) variant = floor(h1*2.999);   // occasional stray bulb
   h  = 0.62 + 0.30*h1;
   hs = 0.55 + 0.13*h1;
   float r = length(cc);
@@ -337,11 +344,19 @@ vec3 skyColor(vec3 rd){
   vec3 ccol = mix(vec3(0.38,0.21,0.38), vec3(1.02,0.60,0.45),
                   pow(sunAz,2.0)*(0.35+0.65*smoothstep(0.4,0.05,rd.y)));
   col = mix(col, ccol, ca);
-  // far hill line on the horizon
+  // crisp low sun disc inside the glow
+  col += vec3(1.3,0.85,0.60)*smoothstep(0.99930, 0.99975, dot(rd, SUN))*2.2;
+  // second, finer cloud layer
+  float cd2 = fbm(cuv*vec2(2.6,5.0) + vec2(uTime*0.010, 3.7));
+  float ca2 = smoothstep(0.60, 0.90, cd2)*smoothstep(0.05, 0.30, rd.y)*0.25;
+  col = mix(col, ccol*0.9, ca2);
+  // treeline silhouette on the horizon
   float az = atan(rd.x, -rd.z);
-  float hillH = 0.012 + 0.026*noise2(vec2(az*2.3+7.1, 3.7)) + 0.012*noise2(vec2(az*6.4, 9.2));
-  float hill = smoothstep(hillH, hillH-0.012, rd.y);
-  col = mix(col, mix(vec3(0.40,0.22,0.30), col, 0.45), hill*0.85);
+  float hillH = 0.016 + 0.022*noise2(vec2(az*2.3+7.1, 3.7)) + 0.014*noise2(vec2(az*9.0, 9.2))
+              + 0.006*noise2(vec2(az*25.0, 4.1));
+  float hill = smoothstep(hillH+0.004, hillH-0.006, rd.y);
+  vec3 treeCol = mix(vec3(0.30,0.16,0.24), vec3(0.55,0.28,0.30), smoothstep(0.0, 0.05, rd.y));
+  col = mix(col, treeCol, hill*0.9);
   if(rd.y > 0.12){
     vec2 sp = rd.xz/(rd.y+0.4)*22.0;
     vec2 id = floor(sp);
@@ -363,7 +378,7 @@ vec3 petalAlbedo(float v, float hgt, float stripe, float mat){
   else if(v < 1.5) { deep=vec3(0.55,0.040,0.140); light=vec3(0.98,0.30,0.45); } // rose-pink
   else             { deep=vec3(0.72,0.160,0.220); light=vec3(0.99,0.73,0.72); } // blush cream
   vec3 col = mix(deep, light, smoothstep(0.0,1.0,hgt));
-  col = mix(vec3(0.62,0.52,0.16), col, smoothstep(0.0,0.12,hgt)); // narrow warm base
+  col = mix(vec3(0.50,0.40,0.14), col, smoothstep(0.0,0.08,hgt)); // subtle warm base
   col *= 0.92 + 0.08*stripe;
   vec3 bud = vec3(0.14,0.26,0.09)*(0.7+0.6*hgt);                  // immature green bud
   // pigment floods from the tip downward, the way real buds color up
@@ -374,10 +389,21 @@ vec3 render(vec3 ro, vec3 rd){
   vec2 tm = march(ro, rd);
   if(tm.y < 0.0){
     vec3 sky = skyColor(rd);
-    if(rd.y < 0.02){
-      // far ground fades analytically into the haze — no seam at march cutoff
-      vec3 haze = vec3(0.58,0.29,0.30);
-      return mix(haze, sky, smoothstep(-0.005, 0.05, rd.y));
+    if(rd.y < 0.0){
+      // beyond march range the field continues as banded color to the horizon
+      float tg = -(ro.y+0.02)/rd.y;
+      vec2 wp = ro.xz + rd.xz*tg;
+      float v = bandVariant(wp.y);
+      vec3 pc = v < 0.5 ? vec3(0.62,0.05,0.05) : (v < 1.5 ? vec3(0.72,0.13,0.26) : vec3(0.85,0.48,0.48));
+      float n = noise2(wp*1.3)*0.5 + noise2(wp*5.1)*0.5;
+      vec3 carpet = mix(vec3(0.045,0.075,0.030), pc*0.8, (0.32+0.42*n)*uBloom);
+      float rowFade = exp(-max(tg-24.0, 0.0)*0.03);
+      carpet *= 1.0 - 0.25*(0.5+0.5*cos(wp.x/SP*6.2832))*rowFade;
+      carpet *= 0.9 + 0.5*pow(clamp(dot(rd,SUN)*0.5+0.5, 0.0, 1.0), 2.0);
+      float sunF = pow(clamp(dot(rd, SUN)*0.5+0.5, 0.0, 1.0), 3.0);
+      vec3 fogC = mix(vec3(0.44,0.26,0.36), vec3(0.86,0.49,0.37), sunF);
+      float fo = 1.0 - exp(-0.030*tg - 0.00035*tg*tg);
+      return mix(carpet, fogC, min(clamp(fo, 0.0, 1.0), 0.78));
     }
     return sky;
   }
@@ -396,6 +422,10 @@ vec3 render(vec3 ro, vec3 rd){
     float bx = fbm(vec2(pos.x+0.06, pos.z)*7.0) - b0;
     float bz = fbm(vec2(pos.x, pos.z+0.06)*7.0) - b0;
     N = normalize(N + vec3(-bx, 0.10, -bz)*1.4);
+    // planting rows run into the distance: ridge at each column, furrow between
+    float fr = 0.5+0.5*cos(pos.x/SP*6.2832);
+    alb *= 0.60 + 0.40*smoothstep(0.10, 0.90, fr);
+    N = normalize(N + vec3(sin(pos.x/SP*6.2832)*0.22, 0.0, 0.0));
     specStr = 0.03;
   } else if(m < 2.5){                       // field stem/leaf
     float yt = clamp(pos.y/0.9, 0.0, 1.0);
@@ -461,7 +491,7 @@ vec3 render(vec3 ro, vec3 rd){
 
   float sunF = pow(clamp(dot(rd, SUN)*0.5+0.5, 0.0, 1.0), 3.0);
   vec3 fogCol = mix(vec3(0.44,0.26,0.36), vec3(0.86,0.49,0.37), sunF);
-  float fo = 1.0 - exp(-0.0080*tm.x*tm.x);
+  float fo = 1.0 - exp(-0.030*tm.x - 0.00035*tm.x*tm.x);
   col = mix(col, fogCol, fo);
   float mist = (1.0-exp(-0.06*tm.x)) * exp(-max(pos.y, 0.0)*3.0) * 0.15;
   col = mix(col, fogCol*1.08, clamp(mist, 0.0, 1.0));
