@@ -287,6 +287,35 @@ vec2 map(vec3 p){
   return res;
 }
 
+// shadow/AO version of the scene: evaluates real geometry only, without the
+// marching bounds (cell borders, field ceiling) that the penumbra estimator
+// would otherwise mistake for occluders
+vec2 mapS(vec3 p){
+  vec2 res = vec2(p.y + 0.02, 1.0);
+  if(p.y < FIELD_TOP){
+    vec2 cell = round(p.xz / SP);
+    vec2 lc = p.xz - cell*SP;
+    float open, h, hs, ph, variant, exist, fmat; vec2 off;
+    fieldParams(cell, open, h, hs, ph, variant, off, exist, fmat);
+    if(exist > 0.5){
+      vec3 rel = vec3(lc.x - off.x, p.y, lc.y - off.y);
+      vec2 dt = tulipSDF(rel, 1.0, open, h, hs, ph, 0.8, 0.0);
+      if(dt.x < res.x) res.x = dt.x;
+    }
+  }
+  for(int i=0;i<NT;i++){
+    vec4 td = TD[i];
+    vec3 rel = p - vec3(td.x, 0.0, td.y);
+    if(length(rel.xz) > 0.62) continue;
+    float g, open, h, hs, ph, nod, hmat; vec3 top;
+    heroParams(i, g, open, h, top, hs, ph, nod, hmat);
+    if(g < 0.015) continue;
+    vec2 dt = tulipSDF(rel, g, open, h, hs, ph, 1.0, nod);
+    if(dt.x < res.x) res.x = dt.x;
+  }
+  return res;
+}
+
 vec2 march(vec3 ro, vec3 rd){
   float t = 0.0, m = -1.0;
   for(int i=0;i<140;i++){
@@ -309,7 +338,7 @@ vec3 calcNormal(vec3 p){
 float softShadow(vec3 ro, vec3 rd){
   float res = 1.0, t = 0.02;
   for(int i=0;i<28;i++){
-    float h = map(ro + rd*t).x;
+    float h = mapS(ro + rd*t).x;
     res = min(res, 16.0*h/t);
     t += clamp(h, 0.012, 0.25);
     if(res < 0.005 || t > 7.0) break;
@@ -321,7 +350,7 @@ float calcAO(vec3 p, vec3 n){
   float occ=0.0, sca=1.0;
   for(int i=0;i<5;i++){
     float hgt = 0.02 + 0.10*float(i);
-    occ += (hgt - map(p + n*hgt).x)*sca;
+    occ += (hgt - mapS(p + n*hgt).x)*sca;
     sca *= 0.7;
   }
   return clamp(1.0 - 1.25*occ, 0.0, 1.0);
@@ -465,6 +494,7 @@ vec3 render(vec3 ro, vec3 rd){
   }
 
   float sh  = softShadow(pos + N*0.012, SUN);
+  sh = mix(sh, 0.90, smoothstep(9.0, 22.0, tm.x));
   float ao  = calcAO(pos, N);
   float dif = clamp(dot(N, SUN), 0.0, 1.0)*sh;
   float skyAmb = clamp(0.5 + 0.5*N.y, 0.0, 1.0);
