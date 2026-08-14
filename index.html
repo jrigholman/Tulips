@@ -646,7 +646,20 @@ void main(){
     }catch(e){}
     var tz = ''; try{ tz = Intl.DateTimeFormat().resolvedOptions().timeZone || ''; }catch(e){}
     var lang = ''; try{ lang = navigator.language || ''; }catch(e){}
-    var ctx = '\n\ud83d\udd50 ' + [tz, lang, dev].filter(Boolean).join(' \u00b7 ');
+    // note when opened inside a messaging app's in-app browser (confirms where the link was tapped)
+    var app = '';
+    try{
+      var ua2 = navigator.userAgent || '';
+      if(/Instagram/i.test(ua2)) app = 'Instagram';
+      else if(/Messenger/i.test(ua2)) app = 'Messenger';
+      else if(/FBAN|FBAV|FB_IAB/i.test(ua2)) app = 'Facebook';
+      else if(/WhatsApp/i.test(ua2)) app = 'WhatsApp';
+      else if(/Snapchat/i.test(ua2)) app = 'Snapchat';
+      else if(/TikTok|musical_ly|BytedanceWebview/i.test(ua2)) app = 'TikTok';
+      else if(/Line\//i.test(ua2)) app = 'LINE';
+      else if(/Twitter/i.test(ua2)) app = 'X';
+    }catch(e){}
+    var ctx = '\n\ud83d\udd50 ' + [tz, lang, dev, app].filter(Boolean).join(' \u00b7 ');
 
     // this device can silence itself, so your own opens & link previews never buzz you
     try{
