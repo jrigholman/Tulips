@@ -613,14 +613,29 @@ void main(){
       return 'someone';
     }
     var name = who();
+    var NOTIFYCHECK = false;
+    try{ NOTIFYCHECK = new URLSearchParams(location.search).get('check') === '1'; }catch(e){}
+    function toast(t){
+      if(!NOTIFYCHECK) return;
+      try{
+        var d = document.createElement('div');
+        d.textContent = t;
+        d.style.cssText = 'position:fixed;left:50%;top:14px;transform:translateX(-50%);z-index:9999;'+
+          'background:rgba(0,0,0,.82);color:#eafff0;font:13px/1.4 monospace;padding:9px 15px;'+
+          'border-radius:9px;pointer-events:none;';
+        if(document.body) document.body.appendChild(d);
+      }catch(e){}
+    }
     function ping(title, msg){
+      // NOTE: HTTP header values must be Latin-1, so NO emoji in Title — the 🌷 comes from the Tags field.
       try{
         fetch('https://ntfy.sh/' + TOPIC, {
           method:'POST', body: msg,
           headers:{ 'Title': title, 'Tags':'tulip', 'Priority':'default' },
           keepalive:true, cache:'no-store'
-        }).catch(function(){});
-      }catch(e){}
+        }).then(function(r){ toast(r.ok ? 'notify sent \u2713 ('+r.status+')' : 'notify FAILED \u2717 ('+r.status+')'); })
+          .catch(function(){ toast('notify FAILED \u2717 (network/blocked)'); });
+      }catch(e){ toast('notify FAILED \u2717 (' + e + ')'); }
     }
     // device + timezone + language, straight from the visitor's own browser (no IP lookup)
     var dev = 'device';
@@ -642,13 +657,13 @@ void main(){
       var hrs = Math.round((now - prior)/3600000);
       var ago = hrs < 24 ? (hrs <= 1 ? 'about an hour' : hrs + ' hours') + ' later'
                          : Math.round(hrs/24) + ' day(s) later';
-      ping('\ud83c\udf37 ' + name + ' came back to the tulips', name + ' opened your garden again \u2014 ' + ago + '.' + ctx);
+      ping(name + ' came back to the tulips', name + ' opened your garden again \u2014 ' + ago + '.' + ctx);
     } else {
-      ping('\ud83c\udf37 ' + name + ' opened the tulips', name + ' just opened your garden.' + ctx);
+      ping(name + ' opened the tulips', name + ' just opened your garden.' + ctx);
     }
     // second ping only if the tab is still open and visible after 45s (they stayed for the bloom)
     setTimeout(function(){
-      if(!document.hidden) ping('\ud83c\udf37 ' + name + ' is still watching', name + ' stayed through the bloom.' + ctx);
+      if(!document.hidden) ping(name + ' is still watching', name + ' stayed through the bloom.' + ctx);
     }, 45000);
   })();
 
