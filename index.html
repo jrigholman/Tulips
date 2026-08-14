@@ -752,6 +752,17 @@ void main(){
         }).catch(function(){});
       }catch(e){}
     }
+    // device + timezone + language, straight from the visitor's own browser (no IP lookup)
+    var dev = 'device';
+    try{
+      var ua = navigator.userAgent;
+      dev = /iPhone/.test(ua) ? 'iPhone' : /iPad/.test(ua) ? 'iPad' : /Android/.test(ua) ? 'Android' :
+            /Macintosh/.test(ua) ? 'Mac' : /Windows/.test(ua) ? 'Windows' : /Linux/.test(ua) ? 'Linux' : 'device';
+    }catch(e){}
+    var tz = ''; try{ tz = Intl.DateTimeFormat().resolvedOptions().timeZone || ''; }catch(e){}
+    var lang = ''; try{ lang = navigator.language || ''; }catch(e){}
+    var ctx = '\n\ud83d\udd50 ' + [tz, lang, dev].filter(Boolean).join(' \u00b7 ');
+
     // remember prior visits on their own device to tell a first open from a return
     var KEY = 'tulips_seen_' + name, now = Date.now(), prior = 0;
     try{ prior = parseInt(localStorage.getItem(KEY) || '0', 10) || 0; }catch(e){}
@@ -761,13 +772,13 @@ void main(){
       var hrs = Math.round((now - prior)/3600000);
       var ago = hrs < 24 ? (hrs <= 1 ? 'about an hour' : hrs + ' hours') + ' later'
                          : Math.round(hrs/24) + ' day(s) later';
-      ping('🌷 ' + name + ' came back to the tulips', name + ' opened your garden again — ' + ago + '.');
+      ping('\ud83c\udf37 ' + name + ' came back to the tulips', name + ' opened your garden again \u2014 ' + ago + '.' + ctx);
     } else {
-      ping('🌷 ' + name + ' opened the tulips', name + ' just opened your garden.');
+      ping('\ud83c\udf37 ' + name + ' opened the tulips', name + ' just opened your garden.' + ctx);
     }
     // second ping only if the tab is still open and visible after 45s (they stayed for the bloom)
     setTimeout(function(){
-      if(!document.hidden) ping('🌷 ' + name + ' is still watching', name + ' stayed through the bloom.');
+      if(!document.hidden) ping('\ud83c\udf37 ' + name + ' is still watching', name + ' stayed through the bloom.' + ctx);
     }, 45000);
   })();
 
