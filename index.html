@@ -752,7 +752,19 @@ void main(){
         }).catch(function(){});
       }catch(e){}
     }
-    ping('🌷 ' + name + ' opened the tulips', name + ' just opened your garden.');
+    // remember prior visits on their own device to tell a first open from a return
+    var KEY = 'tulips_seen_' + name, now = Date.now(), prior = 0;
+    try{ prior = parseInt(localStorage.getItem(KEY) || '0', 10) || 0; }catch(e){}
+    try{ localStorage.setItem(KEY, String(now)); }catch(e){}
+    var RETURN_GAP = 30*60*1000;  // >30 min since last visit counts as coming back, not a reload
+    if(prior && (now - prior) > RETURN_GAP){
+      var hrs = Math.round((now - prior)/3600000);
+      var ago = hrs < 24 ? (hrs <= 1 ? 'about an hour' : hrs + ' hours') + ' later'
+                         : Math.round(hrs/24) + ' day(s) later';
+      ping('🌷 ' + name + ' came back to the tulips', name + ' opened your garden again — ' + ago + '.');
+    } else {
+      ping('🌷 ' + name + ' opened the tulips', name + ' just opened your garden.');
+    }
     // second ping only if the tab is still open and visible after 45s (they stayed for the bloom)
     setTimeout(function(){
       if(!document.hidden) ping('🌷 ' + name + ' is still watching', name + ' stayed through the bloom.');
