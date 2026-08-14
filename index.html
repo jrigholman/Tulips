@@ -732,6 +732,33 @@ void main(){
   if(window.visualViewport) visualViewport.addEventListener('resize', function(){ resize(); placeName(); });
   resize(); placeName();
 
+  // --- ntfy: buzz Jon's phone when the page is opened, and again if she stays ---
+  (function(){
+    var TOPIC = 'tulips-hmwmtzncop';
+    function who(){
+      try{
+        var v = new URLSearchParams(location.search).get('for');
+        if(v){ v = v.replace(/[^A-Za-z0-9_ -]/g,'').slice(0,24); if(v) return v; }
+      }catch(e){}
+      return 'someone';
+    }
+    var name = who();
+    function ping(title, msg){
+      try{
+        fetch('https://ntfy.sh/' + TOPIC, {
+          method:'POST', body: msg,
+          headers:{ 'Title': title, 'Tags':'tulip', 'Priority':'default' },
+          keepalive:true, cache:'no-store'
+        }).catch(function(){});
+      }catch(e){}
+    }
+    ping('🌷 ' + name + ' opened the tulips', name + ' just opened your garden.');
+    // second ping only if the tab is still open and visible after 45s (they stayed for the bloom)
+    setTimeout(function(){
+      if(!document.hidden) ping('🌷 ' + name + ' is still watching', name + ' stayed through the bloom.');
+    }, 45000);
+  })();
+
   // --- timeline ---
   var loadT = performance.now()/1000;
   var started = false, bloomStart = 0;
