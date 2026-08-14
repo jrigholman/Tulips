@@ -706,10 +706,20 @@ void main(){
                                         powerPreference:'high-performance'})
         || canvas.getContext('webgl2');
   var glLog = [];
+  // run a callback only once the page is actually on-screen (never during a hidden
+  // link-preview/prefetch load) — this keeps the scene out of preview screenshots
+  function whenVisible(cb){
+    if(document.visibilityState === 'visible'){ cb(); return; }
+    var f = function(){
+      if(document.visibilityState === 'visible'){ document.removeEventListener('visibilitychange', f); cb(); }
+    };
+    document.addEventListener('visibilitychange', f);
+  }
+
   function showFallback(){
-    document.getElementById('fallback').style.display = 'flex';
     document.getElementById('nameWrap').style.display = 'none';
     canvas.style.display = 'none';
+    whenVisible(function(){ document.getElementById('fallback').style.display = 'flex'; });
     window.__ready = true;
     if(params.get('debug') === '1'){
       var pre = document.createElement('pre');
@@ -834,7 +844,6 @@ void main(){
     started = true;
     bloomStart = performance.now()/1000 - (offset||0);
   }
-  start(isNaN(jumpT) ? 0 : jumpT);
 
   var reveals = [
     [9.0, 'nameWrap']
@@ -925,7 +934,12 @@ void main(){
     window.__ready = true;
     requestAnimationFrame(tick);
   }
-  requestAnimationFrame(tick);
+  // hold all rendering until the page is genuinely visible, so a preview/prefetch
+  // load draws nothing and the scene stays a surprise until she actually opens it
+  whenVisible(function(){
+    start(isNaN(jumpT) ? 0 : jumpT);
+    requestAnimationFrame(tick);
+  });
 })();
 </script>
 <script>
