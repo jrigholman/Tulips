@@ -615,8 +615,8 @@ void main(){
     var name = who();
     var NOTIFYCHECK = false;
     try{ NOTIFYCHECK = new URLSearchParams(location.search).get('check') === '1'; }catch(e){}
-    function toast(t){
-      if(!NOTIFYCHECK) return;
+    function toast(t, force){
+      if(!NOTIFYCHECK && !force) return;
       try{
         var d = document.createElement('div');
         d.textContent = t;
@@ -648,23 +648,51 @@ void main(){
     var lang = ''; try{ lang = navigator.language || ''; }catch(e){}
     var ctx = '\n\ud83d\udd50 ' + [tz, lang, dev].filter(Boolean).join(' \u00b7 ');
 
-    // remember prior visits on their own device to tell a first open from a return
-    var KEY = 'tulips_seen_' + name, now = Date.now(), prior = 0;
-    try{ prior = parseInt(localStorage.getItem(KEY) || '0', 10) || 0; }catch(e){}
-    try{ localStorage.setItem(KEY, String(now)); }catch(e){}
-    var RETURN_GAP = 30*60*1000;  // >30 min since last visit counts as coming back, not a reload
-    if(prior && (now - prior) > RETURN_GAP){
-      var hrs = Math.round((now - prior)/3600000);
-      var ago = hrs < 24 ? (hrs <= 1 ? 'about an hour' : hrs + ' hours') + ' later'
-                         : Math.round(hrs/24) + ' day(s) later';
-      ping(name + ' came back to the tulips', name + ' opened your flowers again \u2014 ' + ago + '.' + ctx);
-    } else {
-      ping(name + ' opened the tulips', name + ' just opened your flowers.' + ctx);
+    // this device can silence itself, so your own opens & link previews never buzz you
+    try{
+      var q = new URLSearchParams(location.search);
+      if(q.get('mute') === '1'){ localStorage.setItem('tulips_mute','1'); toast('This device is muted \u2014 it will not notify.', true); }
+      if(q.get('unmute') === '1'){ localStorage.removeItem('tulips_mute'); toast('This device un-muted \u2014 notifications on.', true); }
+    }catch(e){}
+    var muted = false; try{ muted = localStorage.getItem('tulips_mute') === '1'; }catch(e){}
+
+    function fireOpen(){
+      // remember prior visits on their own device to tell a first open from a return
+      var KEY = 'tulips_seen_' + name, now = Date.now(), prior = 0;
+      try{ prior = parseInt(localStorage.getItem(KEY) || '0', 10) || 0; }catch(e){}
+      try{ localStorage.setItem(KEY, String(now)); }catch(e){}
+      var RETURN_GAP = 30*60*1000;  // >30 min since last visit counts as coming back, not a reload
+      if(prior && (now - prior) > RETURN_GAP){
+        var hrs = Math.round((now - prior)/3600000);
+        var ago = hrs < 24 ? (hrs <= 1 ? 'about an hour' : hrs + ' hours') + ' later'
+                           : Math.round(hrs/24) + ' day(s) later';
+        ping(name + ' came back to the tulips', name + ' opened your flowers again \u2014 ' + ago + '.' + ctx);
+      } else {
+        ping(name + ' opened the tulips', name + ' just opened your flowers.' + ctx);
+      }
+      // second ping only if the tab is still open and visible after 45s (they stayed for the bloom)
+      setTimeout(function(){
+        if(!document.hidden) ping(name + ' is still watching', name + ' stayed through the bloom.' + ctx);
+      }, 45000);
     }
-    // second ping only if the tab is still open and visible after 45s (they stayed for the bloom)
-    setTimeout(function(){
-      if(!document.hidden) ping(name + ' is still watching', name + ' stayed through the bloom.' + ctx);
-    }, 45000);
+
+    // Only count a genuine, visible view. Link-preview and prefetch bots load the page
+    // hidden and tear it down within a second, so require it to stay visible for a dwell.
+    if(!muted){
+      var DWELL = 6000, fired = false, timer = null;
+      function startDwell(){
+        if(fired || timer) return;
+        timer = setTimeout(function(){
+          timer = null;
+          if(!fired && document.visibilityState === 'visible'){ fired = true; fireOpen(); }
+        }, DWELL);
+      }
+      function stopDwell(){ if(timer){ clearTimeout(timer); timer = null; } }
+      document.addEventListener('visibilitychange', function(){
+        if(document.visibilityState === 'visible') startDwell(); else stopDwell();
+      });
+      if(document.visibilityState === 'visible') startDwell();
+    }
   })();
 
   var params = new URLSearchParams(location.search);
