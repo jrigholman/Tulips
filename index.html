@@ -689,22 +689,40 @@ void main(){
       }, 45000);
     }
 
-    // Only count a genuine, visible view. Link-preview and prefetch bots load the page
-    // hidden and tear it down within a second, so require it to stay visible for a dwell.
+    // Tell a real person from a link-preview/prefetch renderer. Meta's preview servers run
+    // the page, report themselves 'visible', and outlasted a plain dwell — one even fired
+    // with the server's own Los_Angeles timezone. So require a signal a server can't fake:
+    // a genuine (isTrusted) interaction, OR sustained foreground time (visible AND focused)
+    // that a quick preview fetch never reaches. Known crawler UAs and automation are skipped.
     if(!muted){
-      var DWELL = 6000, fired = false, timer = null;
-      function startDwell(){
-        if(fired || timer) return;
-        timer = setTimeout(function(){
-          timer = null;
-          if(!fired && document.visibilityState === 'visible'){ fired = true; fireOpen(); }
-        }, DWELL);
+      var ua3 = navigator.userAgent || '';
+      var looksBot = /facebookexternalhit|facebookcatalog|Facebot|TelegramBot|Slackbot|Discordbot|Twitterbot|LinkedInBot|Pinterest|redditbot|Applebot|bingbot|Googlebot|crawler|spider|HeadlessChrome|Headless/i.test(ua3);
+      var automated = false; try{ automated = (navigator.webdriver === true); }catch(e){}
+      if(!looksBot && !automated){
+        var openFired = false;
+        var evNames = ['pointerdown','touchstart','pointermove','wheel','scroll','keydown','click'];
+        var fgMs = 0, fgLast = null, fgTimer = null;
+        function fireOnce(){
+          if(openFired) return;
+          openFired = true;
+          if(fgTimer){ clearInterval(fgTimer); fgTimer = null; }
+          for(var i=0;i<evNames.length;i++) removeEventListener(evNames[i], onInteract, true);
+          document.removeEventListener('visibilitychange', sampleFg);
+          fireOpen();
+        }
+        function onInteract(e){ if(e && e.isTrusted) fireOnce(); }
+        function sampleFg(){
+          var active = (document.visibilityState === 'visible') && document.hasFocus();
+          var now = Date.now();
+          if(active && fgLast != null) fgMs += now - fgLast;
+          fgLast = active ? now : null;
+          if(fgMs >= 12000) fireOnce();
+        }
+        for(var j=0;j<evNames.length;j++) addEventListener(evNames[j], onInteract, true);
+        document.addEventListener('visibilitychange', sampleFg);
+        fgLast = ((document.visibilityState === 'visible') && document.hasFocus()) ? Date.now() : null;
+        fgTimer = setInterval(sampleFg, 1000);
       }
-      function stopDwell(){ if(timer){ clearTimeout(timer); timer = null; } }
-      document.addEventListener('visibilitychange', function(){
-        if(document.visibilityState === 'visible') startDwell(); else stopDwell();
-      });
-      if(document.visibilityState === 'visible') startDwell();
     }
   })();
 
