@@ -657,9 +657,9 @@ void main(){
       var hrs = Math.round((now - prior)/3600000);
       var ago = hrs < 24 ? (hrs <= 1 ? 'about an hour' : hrs + ' hours') + ' later'
                          : Math.round(hrs/24) + ' day(s) later';
-      ping(name + ' came back to the tulips', name + ' opened your garden again \u2014 ' + ago + '.' + ctx);
+      ping(name + ' came back to the tulips', name + ' opened your flowers again \u2014 ' + ago + '.' + ctx);
     } else {
-      ping(name + ' opened the tulips', name + ' just opened your garden.' + ctx);
+      ping(name + ' opened the tulips', name + ' just opened your flowers.' + ctx);
     }
     // second ping only if the tab is still open and visible after 45s (they stayed for the bloom)
     setTimeout(function(){
