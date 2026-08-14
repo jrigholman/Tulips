@@ -834,6 +834,29 @@ void main(){
   requestAnimationFrame(tick);
 })();
 </script>
+<script>
+// A link like ?for=amy is recorded as its own page (/for/amy) in GoatCounter,
+// so each recipient's visits show up as a separate row.
+window.goatcounter = {
+  path: function(p){
+    try{
+      var v = new URLSearchParams(location.search).get('for');
+      if(v){
+        v = v.toLowerCase().replace(/[^a-z0-9_-]/g, '').slice(0, 24);
+        if(v) return '/for/' + v;
+      }
+    }catch(e){}
+    return p;
+  },
+  title: function(t){
+    try{
+      var v = new URLSearchParams(location.search).get('for');
+      if(v) return 'Opened by: ' + v;
+    }catch(e){}
+    return t;
+  }
+};
+</script>
 <script data-goatcounter="https://wcomops.goatcounter.com/count" async src="https://gc.zgo.at/count.js"></script>
 </body>
 </html>
