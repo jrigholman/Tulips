@@ -370,7 +370,7 @@ vec3 skyColor(vec3 rd){
             pow(clamp(1.0-abs(rd.y*2.6),0.0,1.0), 6.0)*(0.25+0.50*pow(sunAz,3.0)));
   float s = clamp(dot(rd, SUN), 0.0, 1.0);
   col += vec3(1.0,0.62,0.35)*pow(s,160.0)*3.5;
-  col += vec3(1.0,0.55,0.32)*pow(s, 12.0)*0.28;
+  col += vec3(1.0,0.55,0.32)*pow(s, 12.0)*0.17;
   // streaky dusk clouds, lit warm on the sun side
   vec2 cuv = rd.xz/(rd.y+0.18)*0.55;
   float cd = fbm(cuv*vec2(1.0,2.3) + vec2(uTime*0.006, 0.0));
@@ -437,7 +437,7 @@ vec3 render(vec3 ro, vec3 rd){
       float sunF = pow(clamp(dot(rd, SUN)*0.5+0.5, 0.0, 1.0), 3.0);
       vec3 fogC = mix(vec3(0.44,0.26,0.36), vec3(0.86,0.49,0.37), sunF);
       float fo = 1.0 - exp(-0.030*tg - 0.00035*tg*tg);
-      return mix(carpet, fogC, min(clamp(fo, 0.0, 1.0), 0.78));
+      return mix(carpet, fogC, min(clamp(fo, 0.0, 1.0), 0.70));
     }
     return sky;
   }
@@ -525,11 +525,11 @@ vec3 render(vec3 ro, vec3 rd){
   col += fres*vec3(0.50,0.30,0.45)*0.15*ao*(sssAmt > 0.9 ? 1.0 : 0.3);
 
   float sunF = pow(clamp(dot(rd, SUN)*0.5+0.5, 0.0, 1.0), 3.0);
-  vec3 fogCol = mix(vec3(0.44,0.26,0.36), vec3(0.86,0.49,0.37), sunF);
+  vec3 fogCol = mix(vec3(0.40,0.23,0.33), vec3(0.80,0.44,0.33), sunF);
   float fo = 1.0 - exp(-0.030*tm.x - 0.00035*tm.x*tm.x);
   col = mix(col, fogCol, fo);
-  float mist = (1.0-exp(-0.06*tm.x)) * exp(-max(pos.y, 0.0)*3.0) * 0.15;
-  col = mix(col, fogCol*1.08, clamp(mist, 0.0, 1.0));
+  float mist = (1.0-exp(-0.06*tm.x)) * exp(-max(pos.y, 0.0)*3.0) * 0.10;
+  col = mix(col, fogCol*0.95, clamp(mist, 0.0, 1.0));
   return col;
 }
 
@@ -554,16 +554,16 @@ void main(){
 
   vec3 col = render(ro, rd);
   float sa = clamp(dot(rd, SUN), 0.0, 1.0);
-  col += vec3(1.2,0.75,0.50)*pow(sa, 6.0)*0.09;
-  col += vec3(1.3,0.90,0.65)*pow(sa,40.0)*0.25;
-  col = aces(col*1.13);
-  col = mix(col, col*col*(3.0-2.0*col), 0.24);
+  col += vec3(1.2,0.75,0.50)*pow(sa, 6.0)*0.035;
+  col += vec3(1.3,0.90,0.65)*pow(sa,40.0)*0.15;
+  col = aces(col*1.05);
+  col = mix(col, col*col*(3.0-2.0*col), 0.34);
   float lum = dot(col, vec3(0.299,0.587,0.114));
-  col = clamp(mix(vec3(lum), col, 1.16), 0.0, 1.0);
+  col = clamp(mix(vec3(lum), col, 1.24), 0.0, 1.0);
   col = pow(col, vec3(1.0/2.2));
 
   vec2 vq = fc/uRes;
-  col *= 0.35 + 0.65*pow(16.0*vq.x*vq.y*(1.0-vq.x)*(1.0-vq.y), 0.18);
+  col *= 0.30 + 0.70*pow(16.0*vq.x*vq.y*(1.0-vq.x)*(1.0-vq.y), 0.22);
   col += (hash2(fc + fract(uTime)*vec2(17.0,23.0))-0.5)*0.006;
   fragColor = vec4(col, 1.0);
 }
