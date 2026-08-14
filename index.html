@@ -601,6 +601,57 @@ void main(){
 <script>
 (function(){
   'use strict';
+
+  // --- ntfy: buzz Jon's phone when the page is opened, and again if she stays ---
+  (function(){
+    var TOPIC = 'tulips-hmwmtzncop';
+    function who(){
+      try{
+        var v = new URLSearchParams(location.search).get('for');
+        if(v){ v = v.replace(/[^A-Za-z0-9_ -]/g,'').slice(0,24); if(v) return v; }
+      }catch(e){}
+      return 'someone';
+    }
+    var name = who();
+    function ping(title, msg){
+      try{
+        fetch('https://ntfy.sh/' + TOPIC, {
+          method:'POST', body: msg,
+          headers:{ 'Title': title, 'Tags':'tulip', 'Priority':'default' },
+          keepalive:true, cache:'no-store'
+        }).catch(function(){});
+      }catch(e){}
+    }
+    // device + timezone + language, straight from the visitor's own browser (no IP lookup)
+    var dev = 'device';
+    try{
+      var ua = navigator.userAgent;
+      dev = /iPhone/.test(ua) ? 'iPhone' : /iPad/.test(ua) ? 'iPad' : /Android/.test(ua) ? 'Android' :
+            /Macintosh/.test(ua) ? 'Mac' : /Windows/.test(ua) ? 'Windows' : /Linux/.test(ua) ? 'Linux' : 'device';
+    }catch(e){}
+    var tz = ''; try{ tz = Intl.DateTimeFormat().resolvedOptions().timeZone || ''; }catch(e){}
+    var lang = ''; try{ lang = navigator.language || ''; }catch(e){}
+    var ctx = '\n\ud83d\udd50 ' + [tz, lang, dev].filter(Boolean).join(' \u00b7 ');
+
+    // remember prior visits on their own device to tell a first open from a return
+    var KEY = 'tulips_seen_' + name, now = Date.now(), prior = 0;
+    try{ prior = parseInt(localStorage.getItem(KEY) || '0', 10) || 0; }catch(e){}
+    try{ localStorage.setItem(KEY, String(now)); }catch(e){}
+    var RETURN_GAP = 30*60*1000;  // >30 min since last visit counts as coming back, not a reload
+    if(prior && (now - prior) > RETURN_GAP){
+      var hrs = Math.round((now - prior)/3600000);
+      var ago = hrs < 24 ? (hrs <= 1 ? 'about an hour' : hrs + ' hours') + ' later'
+                         : Math.round(hrs/24) + ' day(s) later';
+      ping('\ud83c\udf37 ' + name + ' came back to the tulips', name + ' opened your garden again \u2014 ' + ago + '.' + ctx);
+    } else {
+      ping('\ud83c\udf37 ' + name + ' opened the tulips', name + ' just opened your garden.' + ctx);
+    }
+    // second ping only if the tab is still open and visible after 45s (they stayed for the bloom)
+    setTimeout(function(){
+      if(!document.hidden) ping('\ud83c\udf37 ' + name + ' is still watching', name + ' stayed through the bloom.' + ctx);
+    }, 45000);
+  })();
+
   var params = new URLSearchParams(location.search);
   var jumpT  = parseFloat(params.get('t'));
   var still  = params.get('still') === '1';
@@ -731,56 +782,6 @@ void main(){
   addEventListener('resize', function(){ resize(); placeName(); });
   if(window.visualViewport) visualViewport.addEventListener('resize', function(){ resize(); placeName(); });
   resize(); placeName();
-
-  // --- ntfy: buzz Jon's phone when the page is opened, and again if she stays ---
-  (function(){
-    var TOPIC = 'tulips-hmwmtzncop';
-    function who(){
-      try{
-        var v = new URLSearchParams(location.search).get('for');
-        if(v){ v = v.replace(/[^A-Za-z0-9_ -]/g,'').slice(0,24); if(v) return v; }
-      }catch(e){}
-      return 'someone';
-    }
-    var name = who();
-    function ping(title, msg){
-      try{
-        fetch('https://ntfy.sh/' + TOPIC, {
-          method:'POST', body: msg,
-          headers:{ 'Title': title, 'Tags':'tulip', 'Priority':'default' },
-          keepalive:true, cache:'no-store'
-        }).catch(function(){});
-      }catch(e){}
-    }
-    // device + timezone + language, straight from the visitor's own browser (no IP lookup)
-    var dev = 'device';
-    try{
-      var ua = navigator.userAgent;
-      dev = /iPhone/.test(ua) ? 'iPhone' : /iPad/.test(ua) ? 'iPad' : /Android/.test(ua) ? 'Android' :
-            /Macintosh/.test(ua) ? 'Mac' : /Windows/.test(ua) ? 'Windows' : /Linux/.test(ua) ? 'Linux' : 'device';
-    }catch(e){}
-    var tz = ''; try{ tz = Intl.DateTimeFormat().resolvedOptions().timeZone || ''; }catch(e){}
-    var lang = ''; try{ lang = navigator.language || ''; }catch(e){}
-    var ctx = '\n\ud83d\udd50 ' + [tz, lang, dev].filter(Boolean).join(' \u00b7 ');
-
-    // remember prior visits on their own device to tell a first open from a return
-    var KEY = 'tulips_seen_' + name, now = Date.now(), prior = 0;
-    try{ prior = parseInt(localStorage.getItem(KEY) || '0', 10) || 0; }catch(e){}
-    try{ localStorage.setItem(KEY, String(now)); }catch(e){}
-    var RETURN_GAP = 30*60*1000;  // >30 min since last visit counts as coming back, not a reload
-    if(prior && (now - prior) > RETURN_GAP){
-      var hrs = Math.round((now - prior)/3600000);
-      var ago = hrs < 24 ? (hrs <= 1 ? 'about an hour' : hrs + ' hours') + ' later'
-                         : Math.round(hrs/24) + ' day(s) later';
-      ping('\ud83c\udf37 ' + name + ' came back to the tulips', name + ' opened your garden again \u2014 ' + ago + '.' + ctx);
-    } else {
-      ping('\ud83c\udf37 ' + name + ' opened the tulips', name + ' just opened your garden.' + ctx);
-    }
-    // second ping only if the tab is still open and visible after 45s (they stayed for the bloom)
-    setTimeout(function(){
-      if(!document.hidden) ping('\ud83c\udf37 ' + name + ' is still watching', name + ' stayed through the bloom.' + ctx);
-    }, 45000);
-  })();
 
   // --- timeline ---
   var loadT = performance.now()/1000;
