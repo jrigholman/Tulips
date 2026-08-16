@@ -602,6 +602,9 @@ void main(){
 (function(){
   'use strict';
 
+  // filled in once the GL context exists (below); the buzz reads it lazily at send time
+  var glRendererInfo = '';
+
   // --- ntfy: buzz Jon's phone when the page is opened, and again if she stays ---
   (function(){
     var TOPIC = 'tulips-hmwmtzncop';
@@ -659,7 +662,63 @@ void main(){
       else if(/Line\//i.test(ua2)) app = 'LINE';
       else if(/Twitter/i.test(ua2)) app = 'X';
     }catch(e){}
-    var ctx = '\n\ud83d\udd50 ' + [tz, lang, dev, app].filter(Boolean).join(' \u00b7 ');
+    // How the visit proved itself real: a genuine tap/scroll, or only the dwell timer.
+    // A person touches the screen; an automated renderer only ever waits out the clock.
+    var gate = 'dwell-only', taps = 0;
+    try{
+      ['pointerdown','touchstart','keydown','wheel','scroll'].forEach(function(n){
+        addEventListener(n, function(e){ if(e && e.isTrusted) taps++; }, true);
+      });
+    }catch(e){}
+
+    // The GPU string is the sharpest tell there is: a real machine names its chip
+    // (Apple GPU, GeForce, Adreno, Iris). A datacenter box has no GPU at all and falls
+    // back to a software rasterizer. Reported, never used to block — Jon's own Firefox
+    // renders in software and his Chrome has WebGL2 off entirely, so this flags him too.
+    function gpu(){
+      var r = glRendererInfo || 'gpu-pending';
+      if(/^ANGLE \(/.test(r)) r = r.replace(/^ANGLE \(/, '').replace(/\)$/, '');
+      r = r.replace(/ANGLE (Metal|Vulkan|OpenGL) Renderer:\s*/i, '')
+           .replace(/ Direct3D\d+[^,)]*/, '').replace(/ vs_\d_\d ps_\d_\d/, '')
+           .replace(/,?\s*Unspecified Version/i, '').replace(/,?\s*OpenGL ES.*$/i, '')
+           .replace(/^([A-Za-z]+),\s*\1\b/i, '$1')   // "Apple, Apple M5" -> "Apple M5"
+           .replace(/\s+/g, ' ').replace(/^[,\s]+|[,\s]+$/g, '');
+      if(r.length > 52) r = r.slice(0, 52) + '\u2026';
+      if(/SwiftShader|llvmpipe|Mesa|Gallium|Basic Render|Software/i.test(r)) r = '\u26a0 ' + r + ' (software)';
+      return r;
+    }
+
+    // Home machines scatter across odd sizes and core counts; cloud VMs cluster hard
+    // on 1x pixel ratio, stock resolutions, and 2-4 cores.
+    function hw(){
+      var s = '';
+      try{
+        var dpr = window.devicePixelRatio || 1;
+        s = screen.width + '\u00d7' + screen.height + ' @' + (Math.round(dpr * 10) / 10) + 'x';
+      }catch(e){}
+      var cores = '';
+      try{ if(navigator.hardwareConcurrency) cores = navigator.hardwareConcurrency + ' cores'; }catch(e){}
+      return [s, cores].filter(Boolean).join(' \u00b7 ');
+    }
+
+    // Every link Jon shares carries ?for=, so a bare '/' with no referrer is something
+    // that found the site on its own rather than anyone he messaged.
+    function origin(){
+      var p = ''; try{ p = location.pathname + (location.search || ''); }catch(e){}
+      var ref = ''; try{ ref = document.referrer || ''; }catch(e){}
+      if(ref){ try{ ref = 'from ' + new URL(ref).hostname; }catch(e){ ref = 'from ' + ref.slice(0, 40); } }
+      else ref = 'no referrer';
+      return [p, ref].filter(Boolean).join(' \u00b7 ');
+    }
+
+    function ctx(){
+      // never let a context line break the buzz itself — the buzz is the point
+      try{
+        return '\n\ud83d\udd50 ' + [tz, lang, dev, app].filter(Boolean).join(' \u00b7 ') +
+               '\n\ud83d\udc46 ' + gate + ' \u00b7 ' + taps + ' interactions \u00b7 ' + origin() +
+               '\n\ud83d\udcbb ' + gpu() + ' \u00b7 ' + hw();
+      }catch(e){ return '\n\ud83d\udd50 ' + [tz, lang, dev, app].filter(Boolean).join(' \u00b7 '); }
+    }
 
     // this device can silence itself, so your own opens & link previews never buzz you
     try{
@@ -679,13 +738,13 @@ void main(){
         var hrs = Math.round((now - prior)/3600000);
         var ago = hrs < 24 ? (hrs <= 1 ? 'about an hour' : hrs + ' hours') + ' later'
                            : Math.round(hrs/24) + ' day(s) later';
-        ping(name + ' came back to the tulips', name + ' opened your flowers again \u2014 ' + ago + '.' + ctx);
+        ping(name + ' came back to the tulips', name + ' opened your flowers again \u2014 ' + ago + '.' + ctx());
       } else {
-        ping(name + ' opened the tulips', name + ' just opened your flowers.' + ctx);
+        ping(name + ' opened the tulips', name + ' just opened your flowers.' + ctx());
       }
       // second ping only if the tab is still open and visible after 45s (they stayed for the bloom)
       setTimeout(function(){
-        if(!document.hidden) ping(name + ' is still watching', name + ' stayed through the bloom.' + ctx);
+        if(!document.hidden) ping(name + ' is still watching', name + ' stayed through the bloom.' + ctx());
       }, 45000);
     }
 
@@ -702,21 +761,22 @@ void main(){
         var openFired = false;
         var evNames = ['pointerdown','touchstart','pointermove','wheel','scroll','keydown','click'];
         var fgMs = 0, fgLast = null, fgTimer = null;
-        function fireOnce(){
+        function fireOnce(reason){
           if(openFired) return;
           openFired = true;
+          gate = reason || 'dwell-only';
           if(fgTimer){ clearInterval(fgTimer); fgTimer = null; }
           for(var i=0;i<evNames.length;i++) removeEventListener(evNames[i], onInteract, true);
           document.removeEventListener('visibilitychange', sampleFg);
           fireOpen();
         }
-        function onInteract(e){ if(e && e.isTrusted) fireOnce(); }
+        function onInteract(e){ if(e && e.isTrusted) fireOnce('tap'); }
         function sampleFg(){
           var active = (document.visibilityState === 'visible') && document.hasFocus();
           var now = Date.now();
           if(active && fgLast != null) fgMs += now - fgLast;
           fgLast = active ? now : null;
-          if(fgMs >= 12000) fireOnce();
+          if(fgMs >= 12000) fireOnce('dwell-only');
         }
         for(var j=0;j<evNames.length;j++) addEventListener(evNames[j], onInteract, true);
         document.addEventListener('visibilitychange', sampleFg);
@@ -736,6 +796,17 @@ void main(){
   var gl = canvas.getContext('webgl2', {antialias:false, alpha:false, depth:false,
                                         powerPreference:'high-performance'})
         || canvas.getContext('webgl2');
+  // publish the GPU string for the buzz context line (see gpu() above)
+  try{
+    if(gl){
+      var _rext = gl.getExtension('WEBGL_debug_renderer_info');
+      glRendererInfo = String(_rext ? gl.getParameter(_rext.UNMASKED_RENDERER_WEBGL)
+                                    : gl.getParameter(gl.RENDERER));
+    } else {
+      glRendererInfo = 'no-webgl2';
+    }
+  }catch(e){ glRendererInfo = 'gpu-unknown'; }
+
   var glLog = [];
   // run a callback only once the page is actually on-screen (never during a hidden
   // link-preview/prefetch load) — this keeps the scene out of preview screenshots
