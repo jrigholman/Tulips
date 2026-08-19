@@ -28,7 +28,7 @@
 *{box-sizing:border-box}
 html,body{height:100%}
 body{
-  margin:0; overflow:hidden; background:#190a16; color:var(--ivory);
+  margin:0; overflow:hidden; background:#000; color:var(--ivory);
   font-family:'Cormorant Garamond', Georgia, 'Times New Roman', serif;
   -webkit-font-smoothing:antialiased;
 }
@@ -36,22 +36,30 @@ body{
 
 /* ---- her name ---- */
 #nameWrap{
-  position:fixed; left:0; right:0; top:19vh; text-align:center; pointer-events:none; z-index:3;
+  position:fixed; left:0; right:0; top:50%; text-align:center; pointer-events:none; z-index:3;
   transform:translateY(-50%);
   opacity:0; filter:blur(6px);
   transition:opacity 3.2s ease, filter 3.2s ease;
+}
+/* a soft pool of shade so the name reads over the heart of the flower */
+#nameWrap::before{
+  content:''; position:absolute; left:50%; top:50%; transform:translate(-50%,-50%);
+  width:min(84vw, 660px); height:min(48vh, 340px); z-index:-1; pointer-events:none;
+  background:radial-gradient(ellipse at center,
+    rgba(6,2,5,.60) 0%, rgba(6,2,5,.34) 44%, rgba(6,2,5,0) 74%);
 }
 #nameWrap.show{opacity:1; filter:blur(0)}
 #nameWrap #name{transition:transform 3.2s ease; transform:translateY(14px)}
 #nameWrap.show #name{transform:none}
 #name{
   margin:0; font-family:'Great Vibes', 'Snell Roundhand', cursive; font-weight:400;
-  font-size:clamp(74px, 17vw, 190px); line-height:1.1; color:var(--ivory);
+  font-size:clamp(58px, 13.5vw, 152px); line-height:1.1; color:var(--ivory);
   text-shadow:
-    0 0 18px rgba(255,170,150,.55),
-    0 0 60px rgba(255,110,130,.40),
-    0 0 140px rgba(255, 80,120,.30),
-    0 2px 4px rgba(60,10,30,.35);
+    0 0 10px rgba(0,0,0,.85),
+    0 0 32px rgba(0,0,0,.55),
+    0 0 26px rgba(255,190,160,.50),
+    0 0 80px rgba(255,140,150,.34),
+    0 0 170px rgba(255,110,140,.22);
 }
 .intro-name{
   font-family:'Great Vibes', cursive; font-size:clamp(56px, 11vw, 110px);
@@ -72,7 +80,7 @@ body{
 #fallback{
   position:fixed; inset:0; z-index:5; display:none; align-items:center; justify-content:center;
   text-align:center; padding:8vw;
-  background:linear-gradient(180deg, #2b0f2b 0%, #4b1330 55%, #6e2131 78%, #23100f 100%);
+  background:radial-gradient(ellipse at 50% 45%, #1a0d14 0%, #0a0509 55%, #000 100%);
 }
 #fallback .tulips{font-size:clamp(34px,7vw,64px); letter-spacing:.2em; margin:.6em 0}
 </style>
@@ -89,7 +97,7 @@ body{
 <div id="fallback">
   <div>
     <div class="intro-name">Amy</div>
-    <div class="tulips">🌷 🌷 🌷 🌷 🌷</div>
+    <div class="tulips" id="fbEmoji">🌷 🌷 🌷 🌷 🌷</div>
   </div>
 </div>
 
@@ -100,26 +108,20 @@ uniform vec2  uRes;
 uniform float uTime;
 uniform float uBloom;
 uniform vec2  uMouse;
+// --- flower species, chosen fresh in JS on every visit ---
+uniform float uArch;   // 0 dense spiral, 1 sculptural few, 2 flat rays, 3 simple five
+uniform vec4  uP1;     // whorls, petals per whorl, petal length, petal width
+uniform vec4  uP2;     // curl, cup, ruffle, tip sharpness
+uniform vec4  uP3;     // open tilt outer, open tilt inner, centre size, stamens on
+uniform vec3  uColA;   // petal base
+uniform vec3  uColB;   // petal edge
+uniform vec3  uColC;   // centre
+uniform float uSeed;
+uniform float uDof;
 out vec4 fragColor;
 
-#define NT 7
-
-// hero tulips that rise out of the field and bloom around her name: x, z, final height, color-variant
-const vec4 TD[NT] = vec4[](
-  vec4(-1.09, 1.99, 1.87, 0.0),
-  vec4(-1.04, 1.78, 1.50, 1.0),
-  vec4(-0.71, 1.42, 1.17, 2.0),
-  vec4( 0.00, 1.23, 1.00, 1.0),
-  vec4( 0.71, 1.42, 1.17, 2.0),
-  vec4( 1.04, 1.78, 1.50, 1.0),
-  vec4( 1.09, 1.99, 1.87, 0.0)
-);
-// rise order: centre first, then outward
-const float HORD[NT] = float[](5.0, 3.0, 1.0, 0.0, 2.0, 4.0, 6.0);
-const float SP = 0.85;        // field spacing
-const float FIELD_TOP = 1.25; // nothing in the field reaches above this
-
-const vec3 SUN = normalize(vec3(-0.45, 0.30, -0.80));
+#define PI  3.14159265
+#define TAU 6.28318531
 
 mat2 rot(float a){ float c=cos(a), s=sin(a); return mat2(c,-s,s,c); }
 float hash2(vec2 p){ return fract(sin(dot(p, vec2(127.1,311.7)))*43758.5453); }
@@ -129,407 +131,271 @@ float noise2(vec2 p){
   return mix(mix(hash2(i),hash2(i+vec2(1,0)),f.x),
              mix(hash2(i+vec2(0,1)),hash2(i+vec2(1,1)),f.x), f.y);
 }
-
 float fbm(vec2 p){
-  float a=0.5, r=0.0;
-  for(int i=0;i<4;i++){ r += a*noise2(p); p = p*2.03 + 11.7; a *= 0.5; }
-  return r;
+  float v=0.0, a=0.5;
+  for(int i=0;i<4;i++){ v += a*noise2(p); p*=2.02; a*=0.5; }
+  return v;
 }
-
-// Dutch fields are planted in color bands; band index comes from depth
-float bandVariant(float wz){
-  float band = floor(wz/(SP*5.0));
-  return floor(hash2(vec2(band, 7.3))*2.999);
-}
-
 float sdEllipsoid(vec3 p, vec3 r){
-  float k0=length(p/r);
-  float k1=length(p/(r*r));
-  return k0*(k0-1.0)/k1;
+  float k0 = length(p/r);
+  float k1 = length(p/(r*r));
+  return k0*(k0-1.0)/max(k1, 1e-6);
 }
 float sdSeg(vec3 p, vec3 a, vec3 b, float r1, float r2){
-  vec3 pa=p-a, ba=b-a;
-  float h=clamp(dot(pa,ba)/dot(ba,ba),0.0,1.0);
-  return length(pa-ba*h) - mix(r1,r2,h);
+  vec3 pa = p-a, ba = b-a;
+  float h = clamp(dot(pa,ba)/dot(ba,ba), 0.0, 1.0);
+  return length(pa - ba*h) - mix(r1, r2, h);
 }
 
-void heroParams(int i, out float g, out float open, out float h,
-                out vec3 top, out float hs, out float ph, out float nod, out float mat){
-  vec4 td = TD[i];
-  ph   = fract(float(i)*0.618+0.11);
-  g    = clamp((uBloom - 0.06 - HORD[i]*0.055)*1.9, 0.0, 1.0);
-  g    = g*g*(3.0-2.0*g);
-  float rise = smoothstep(0.10, 0.80, g);        // leaves sprout before the stem rises
-  open = smoothstep(0.86, 1.0, g);               // petals unfurl only at the very end
-  mat  = smoothstep(0.55, 0.82, g);              // green bud pigments before opening
-  nod  = 1.05*(1.0 - smoothstep(0.42, 0.78, g)); // young bud nods, straightens toward the light
-  h    = td.z*(0.055 + 0.945*rise);
-  top  = vec3(td.x, h, td.y);
-  hs   = (0.30+0.70*smoothstep(0.15, 0.75, g))*(0.72+0.30*(td.z/1.9));
+// ---------------------------------------------------------------------------
+// One petal, in canonical space: grows along +Y, width across +/-Z,
+// thickness across +/-X. Every species is this same sheet under different
+// numbers -- which is what lets the page hand out a new flower each visit.
+// ---------------------------------------------------------------------------
+float petalSDF(vec3 q, float len, float wid, float curl, float cup,
+               float ruf, float tip, float sk){
+  // Built on an ellipsoid rather than a width-profile band: a profile that
+  // rounds off at both ends has unbounded slope there, which makes the field
+  // non-Lipschitz and lets the marcher punch through the sheet. An ellipsoid
+  // deformed by bounded terms stays well behaved.
+  //   local axes here: x = thickness, y = length, z = width
+  float t = clamp(q.y/len, 0.0, 1.0);
+  vec3 w = q;
+  w.x -= curl*t*t*len;                              // tip curls along the normal
+  w.x += cup*(w.z*w.z)/(wid*len + 1e-3)*0.28;       // lengthwise channel
+  // squeeze the width toward the tip: rounded for roses, drawn to a point for lilies
+  w.z *= 1.0 + (2.60*tip - 0.30)*smoothstep(0.30, 1.0, t);
+  w.z += ruf*wid*len*0.045*sin(t*2.6 + sk*TAU);     // shallow ruffle
+  float d = sdEllipsoid(w - vec3(0.0, len*0.48, 0.0),
+                        vec3(len*0.016 + 0.0035, len*0.50, wid*len));
+  return d*0.55;
 }
 
-// field tulips: fully grown from the start, buds closed until the bloom wave arrives
-void fieldParams(vec2 cell, out float open, out float h, out float hs,
-                 out float ph, out float variant, out vec2 off, out float exist, out float mat){
-  float h1 = hash2(cell*1.13+4.7);
-  float h2 = hash2(cell*2.31+9.1);
-  float h3 = hash2(cell*3.71+17.3);
-  exist = step(0.08, h1);
-  vec2 cc = cell*SP;
-  if(length(cc - vec2(0.0, 2.9)) < 1.35) exist = 0.0;  // clear pocket at the camera
-  off = (vec2(h2, h3)-0.5)*0.22;
-  ph = h2;
-  variant = bandVariant(cc.y);
-  if(h3 > 0.93) variant = floor(h1*2.999);   // occasional stray bulb
-  h  = 0.62 + 0.30*h1;
-  hs = 0.55 + 0.13*h1;
-  float r = length(cc);
-  float term = uBloom*1.5 - 0.1 - h2*0.3 - clamp(r/9.0, 0.0, 1.0)*0.6;
-  open = smoothstep(0.0, 0.35, term);
-  mat  = smoothstep(-0.30, 0.25, term);
+// how far through its own opening a given whorl is (outer petals reflex first,
+// so the heart stays shut until the very end and her name lands on the climax)
+float whorlOpen(float wn){
+  float dly = wn*0.44;
+  return smoothstep(dly, dly + 0.52, uBloom);
 }
 
-// six petals in two rings, blooming with `open`
-float dHead(vec3 q, float open){
-  float d = 1e9;
-  for(int k=0;k<6;k++){
-    float ring = k<3 ? 0.0 : 1.0;
-    float ang  = float(k)*2.0944 + ring*1.0472;
-    vec3 w = q;
-    w.xz = rot(ang)*w.xz;
-    w.z -= mix(0.020, 0.055, open) + ring*0.012;
-    float tilt = mix(-0.06 - ring*0.05, 0.38 + ring*0.22, open);
-    w.yz = rot(tilt)*w.yz;
-    w.z += mix(0.45, 0.85, open)*w.y*w.y;
-    w.x *= 1.0 + 0.9*smoothstep(0.24, 0.46, w.y);   // taper to a pointed tip
-    w.x += 0.006*sin(w.y*34.0 + float(k)*7.0);      // gently ruffled edge
-    float pd = sdEllipsoid(w - vec3(0.0,0.20,0.0),
-                           vec3(0.088-0.012*ring, 0.225, 0.015));
-    d = min(d, pd*0.55);
+// ---------------------------------------------------------------------------
+// The flower. Petals within a whorl are identical, so instead of looping over
+// all of them we fold the angle into one petal's wedge and test only that
+// petal and its two neighbours -- 3 evaluations per whorl instead of N.
+// ---------------------------------------------------------------------------
+vec2 flowerSDF(vec3 p, bool cheap){
+  // a slow breath so it never looks frozen
+  float sway = sin(uTime*0.55)*0.010 + sin(uTime*0.31 + 1.7)*0.006;
+  p.x += sway*(p.y + 1.70);
+  p.z += sway*0.5*(p.y + 1.70);
+
+  vec2 res = vec2(1e9, -1.0);
+
+  float W    = uP1.x, N = uP1.y, len = uP1.z, wid = uP1.w;
+  // the head swells as it opens, so it reads as a bud first
+  len *= mix(0.62, 1.0, smoothstep(0.0, 0.55, uBloom));
+  float curl = uP2.x, cup = uP2.y, ruf = uP2.z, tip = uP2.w;
+
+  // bail out early when the ray is nowhere near the head
+  float reach = len*1.35 + 0.12;
+  float dBound = length(p - vec3(0.0, len*0.30, 0.0)) - reach;
+  if(dBound > 0.06){
+    float ds = sdSeg(p, vec3(0.0,-0.03,0.0), vec3(0.0,-1.75,0.0), 0.030, 0.044);
+    return vec2(min(dBound, ds), dBound < ds ? 3.0 : 2.0);
   }
-  return d;
-}
 
-// one tulip in local space; returns (distance, part: 0 stem/leaf, 1 petals, 2 pistil)
-vec2 tulipSDF(vec3 rel, float g, float open, float h, float hs, float ph, float leafScale, float nod){
-  float sw = sin(uTime*0.8 + ph*6.2832)*0.018*g;
-  rel.x += sw*rel.y;
-  vec3 ltop = vec3(0.0, h, 0.0);
-  vec2 res = vec2(sdSeg(rel, vec3(0.0), ltop, 0.034*g+0.006, 0.020*g+0.005), 0.0);
-  vec3 lf = rel;
-  lf.xz = rot(ph*6.2832+1.9)*lf.xz;
-  lf.yz = rot(0.42)*lf.yz;
-  lf.z += 0.9*lf.y*lf.y;
-  float lh = (0.34*g+0.03)*leafScale;
-  float dl = sdEllipsoid(lf - vec3(0.0, lh, 0.0), vec3(0.055*leafScale, lh, 0.012))*0.8;
-  if(dl < res.x) res = vec2(dl, 0.0);
-  vec3 q = (rel - ltop)/hs;
-  q.y -= 0.02;
-  if(nod > 0.001){
-    float az = ph*6.2832;
-    q.xz = rot(az)*q.xz;
-    q.yz = rot(-nod)*q.yz;
-    q.xz = rot(-az)*q.xz;
-  }
-  float bh = length(q - vec3(0.0,0.2,0.0)) - 0.55;
-  if(bh*hs < res.x){
-    if(bh > 0.12){
-      float bd = (bh+0.02)*hs;
-      if(bd < res.x) res.x = bd;
-    } else {
-      float dh = dHead(q, open)*hs;
-      if(dh < res.x) res = vec2(dh, 1.0);
-      float dp = sdEllipsoid(q - vec3(0.0,0.10,0.0), vec3(0.030,0.075,0.030))*hs;
-      if(dp < res.x) res = vec2(dp, 2.0);
+  int wmax = cheap ? 3 : 7;
+  for(int w=0; w<7; w++){
+    if(w >= wmax) break;
+    float fw = float(w);
+    if(fw >= W) break;
+    float wn = W > 1.0 ? fw/(W - 1.0) : 0.0;     // 0 outermost .. 1 innermost
+
+    float shrink = uArch < 0.5 ? 0.42 : (uArch < 1.5 ? 0.90 :
+                  (uArch < 2.5 ? 0.58 : 1.00));
+    float sc = mix(1.0, shrink, wn);             // inner whorls are smaller
+    float pc = max(3.0, floor(N*mix(1.0, 0.60, wn) + 0.5));
+    float ph = fw*2.39996 + uSeed*0.7;           // golden angle between whorls
+    float ow = whorlOpen(wn);
+    float tOpen = mix(uP3.y, uP3.x, 1.0 - wn);
+    float tilt  = mix(-0.13, tOpen, ow);   // leans inward while still a bud
+    float rad   = mix(0.12, 0.05, wn)*len;
+    float yoff  = mix(0.0, 0.05, wn)*len;
+
+    float sector = TAU/pc;
+    float a = atan(p.z, p.x) - ph;
+    float base = floor(a/sector + 0.5);
+
+    for(int j=-1; j<=1; j++){
+      float idx = base + float(j);
+      float ang = idx*sector + ph;
+      vec3 q = p;
+      q.y -= yoff;
+      q.xz = rot(ang)*q.xz;       // bring this petal round to +X
+      q.x -= rad;                 // lift its root off the axis
+      q.xy = rot(-tilt)*q.xy;     // swing it out so its length runs along +Y
+      float sk = hash2(vec2(idx, fw) + uSeed*3.7);
+      // a touch of per-petal variation so no two petals are twins
+      float jl = 1.0 + (sk - 0.5)*0.16;
+      float d = petalSDF(q, len*sc*jl, wid, curl, cup, ruf, tip, sk);
+      if(d < res.x) res = vec2(d, 3.0);
     }
   }
+
+  // heart of the flower
+  float cs = uP3.z*len;
+  float dc = sdEllipsoid(p - vec3(0.0, cs*0.30, 0.0), vec3(cs, cs*0.60, cs));
+  if(dc < res.x) res = vec2(dc, 4.0);
+
+  // stamens, for the species that show them
+  if(uP3.w > 0.5 && !cheap){
+    float sn = 15.0;
+    float sector = TAU/sn;
+    float a = atan(p.z, p.x);
+    float b = floor(a/sector + 0.5);
+    float grow = smoothstep(0.55, 0.95, uBloom);
+    for(int j=-1; j<=1; j++){
+      float idx = b + float(j);
+      float ang = idx*sector;
+      vec3 q = p;
+      q.xz = rot(ang)*q.xz;
+      float sk = hash2(vec2(idx, 9.0) + uSeed);
+      float rr = cs*(1.25 + sk*0.55);
+      float hh = cs*(1.7 + sk*0.9)*grow;
+      vec3 tipP = vec3(rr, hh, 0.0);
+      float d = sdSeg(q, vec3(cs*0.35, cs*0.35, 0.0), tipP, 0.0055, 0.0035);
+      d = min(d, length(q - tipP) - cs*0.19);
+      if(d < res.x) res = vec2(d, 5.0);
+    }
+  }
+
+  // sepals tucked under the head, and the stem
+  if(!cheap){
+    float sepal = TAU/5.0;
+    float a2 = atan(p.z, p.x) + 0.4;
+    float b2 = floor(a2/sepal + 0.5);
+    for(int j=-1; j<=1; j++){
+      float ang = (b2 + float(j))*sepal - 0.4;
+      vec3 q = p;
+      q.xz = rot(ang)*q.xz;
+      q.x -= len*0.05;
+      q.xy = rot(-(2.35 - 0.5*uBloom))*q.xy;
+      float d = petalSDF(q, len*0.34, 0.16, 0.40, 0.4, 0.2, 0.9, 0.3);
+      if(d < res.x) res = vec2(d, 6.0);
+    }
+  }
+  float ds = sdSeg(p, vec3(0.0,-0.03,0.0), vec3(0.0,-1.75,0.0), 0.030, 0.044);
+  if(ds < res.x) res = vec2(ds, 2.0);
+
   return res;
 }
 
-vec2 map(vec3 p){
-  vec2 res = vec2(p.y + 0.02, 1.0);            // ground
-
-  // ---- endless tulip field (domain repetition) ----
-  if(p.y < FIELD_TOP){
-    vec2 cell = round(p.xz / SP);
-    vec2 lc = p.xz - cell*SP;
-    float dEdge = SP*0.5 - max(abs(lc.x), abs(lc.y)) + 0.03;
-    float open, h, hs, ph, variant, exist, fmat; vec2 off;
-    fieldParams(cell, open, h, hs, ph, variant, off, exist, fmat);
-    if(exist > 0.5){
-      vec3 rel = vec3(lc.x - off.x, p.y, lc.y - off.y);
-      vec2 dt = tulipSDF(rel, 1.0, open, h, hs, ph, 0.8, 0.0);
-      if(dt.x <= dEdge){
-        if(dt.x < res.x)
-          res = vec2(dt.x, dt.y < 0.5 ? 2.0 : (dt.y < 1.5 ? 3.0 + variant : 7.0));
-      } else if(dEdge < res.x) res.x = dEdge;
-    } else if(dEdge < res.x) res.x = dEdge;
-  } else {
-    // lower bound on distance to any field geometry; floored so it can
-    // never satisfy the hit epsilon and become a phantom ceiling
-    float fb = max(p.y - FIELD_TOP, 0.05);
-    if(fb < res.x) res.x = fb;
-  }
-
-  // ---- hero tulips around the name ----
-  for(int i=0;i<NT;i++){
-    vec4 td = TD[i];
-    vec3 rel = p - vec3(td.x, 0.0, td.y);
-    float bound = length(rel.xz) - 0.62;
-    if(bound > 0.30){
-      if(bound < res.x) res.x = bound;
-      continue;
-    }
-    float g, open, h, hs, ph, nod, hmat; vec3 top;
-    heroParams(i, g, open, h, top, hs, ph, nod, hmat);
-    if(g < 0.015) continue;
-    vec2 dt = tulipSDF(rel, g, open, h, hs, ph, 1.0, nod);
-    if(dt.x < res.x)
-      res = vec2(dt.x, dt.y < 0.5 ? 40.0+float(i) : (dt.y < 1.5 ? 20.0+float(i) : 60.0+float(i)));
-  }
-  return res;
-}
-
-// shadow/AO version of the scene: evaluates real geometry only, without the
-// marching bounds (cell borders, field ceiling) that the penumbra estimator
-// would otherwise mistake for occluders
-vec2 mapS(vec3 p){
-  vec2 res = vec2(p.y + 0.02, 1.0);
-  if(p.y < FIELD_TOP){
-    vec2 cell = round(p.xz / SP);
-    vec2 lc = p.xz - cell*SP;
-    float open, h, hs, ph, variant, exist, fmat; vec2 off;
-    fieldParams(cell, open, h, hs, ph, variant, off, exist, fmat);
-    if(exist > 0.5){
-      vec3 rel = vec3(lc.x - off.x, p.y, lc.y - off.y);
-      float d = min(sdSeg(rel, vec3(0.0), vec3(0.0,h,0.0), 0.045, 0.030),
-                    length(rel - vec3(0.0, h+0.16*hs, 0.0)) - 0.24*hs);
-      if(d < res.x) res.x = d;
-    }
-  }
-  for(int i=0;i<NT;i++){
-    vec4 td = TD[i];
-    vec3 rel = p - vec3(td.x, 0.0, td.y);
-    if(length(rel.xz) > 0.62) continue;
-    float g, open, h, hs, ph, nod, hmat; vec3 top;
-    heroParams(i, g, open, h, top, hs, ph, nod, hmat);
-    if(g < 0.015) continue;
-    float d = min(sdSeg(rel, vec3(0.0), vec3(0.0,h,0.0), 0.042, 0.026),
-                  length(rel - vec3(0.0, h+0.16*hs, 0.0)) - 0.26*hs);
-    if(d < res.x) res.x = d;
-  }
-  return res;
-}
+vec2 map(vec3 p){ return flowerSDF(p, false); }
+vec2 mapS(vec3 p){ return flowerSDF(p, true); }
 
 vec2 march(vec3 ro, vec3 rd){
-  float t = 0.0, m = -1.0;
-  for(int i=0;i<150;i++){
+  float t = 0.02, m = -1.0;
+  for(int i=0;i<175;i++){
     vec3 pos = ro + rd*t;
     vec2 h = map(pos);
-    if(h.x < 0.001*t + 0.0005){ m = h.y; break; }
+    if(h.x < 0.0007*t + 0.00035){ m = h.y; break; }
     t += h.x*0.72;
-    if(t > 18.0) break;
+    if(t > 7.0) break;
   }
-  if(t > 18.0) m = -1.0;
+  if(t > 7.0) m = -1.0;
   return vec2(t, m);
 }
 
 vec3 calcNormal(vec3 p){
-  const vec2 e = vec2(0.0016, -0.0016);
+  const vec2 e = vec2(0.0012, -0.0012);
   return normalize(e.xyy*map(p+e.xyy).x + e.yyx*map(p+e.yyx).x +
                    e.yxy*map(p+e.yxy).x + e.xxx*map(p+e.xxx).x);
 }
 
 float softShadow(vec3 ro, vec3 rd){
-  float res = 1.0, t = 0.02;
-  for(int i=0;i<28;i++){
+  float res = 1.0, t = 0.015;
+  for(int i=0;i<18;i++){
     float h = mapS(ro + rd*t).x;
-    res = min(res, 16.0*h/t);
-    t += clamp(h, 0.012, 0.25);
-    if(res < 0.005 || t > 7.0) break;
+    res = min(res, 14.0*h/t);
+    t += clamp(h, 0.010, 0.14);
+    if(res < 0.006 || t > 2.6) break;
   }
   return clamp(res, 0.0, 1.0);
 }
 
 float calcAO(vec3 p, vec3 n){
   float occ=0.0, sca=1.0;
-  for(int i=0;i<5;i++){
-    float hgt = 0.02 + 0.10*float(i);
+  for(int i=0;i<4;i++){
+    float hgt = 0.012 + 0.055*float(i);
     occ += (hgt - mapS(p + n*hgt).x)*sca;
-    sca *= 0.7;
+    sca *= 0.72;
   }
-  return clamp(1.0 - 1.25*occ, 0.0, 1.0);
+  return clamp(1.0 - 1.4*occ, 0.0, 1.0);
 }
 
-vec3 skyColor(vec3 rd){
-  float t = clamp(rd.y*0.5+0.5, 0.0, 1.0);
-  float sunAz = clamp(dot(normalize(rd.xz+vec2(1e-4,0.0)), normalize(SUN.xz))*0.5+0.5, 0.0, 1.0);
-  vec3 col = mix(vec3(0.94,0.55,0.38), vec3(0.20,0.09,0.27), pow(t, 0.62));
-  // horizon glow, strongest toward the sun
-  col = mix(col, vec3(1.00,0.72,0.44),
-            pow(clamp(1.0-abs(rd.y*2.6),0.0,1.0), 6.0)*(0.25+0.50*pow(sunAz,3.0)));
-  float s = clamp(dot(rd, SUN), 0.0, 1.0);
-  col += vec3(1.0,0.62,0.35)*pow(s,160.0)*3.5;
-  col += vec3(1.0,0.55,0.32)*pow(s, 12.0)*0.17;
-  // streaky dusk clouds, lit warm on the sun side
-  vec2 cuv = rd.xz/(rd.y+0.18)*0.55;
-  float cd = fbm(cuv*vec2(1.0,2.3) + vec2(uTime*0.006, 0.0));
-  float ca = smoothstep(0.52, 0.85, cd) * smoothstep(0.02, 0.18, rd.y) * 0.5;
-  vec3 ccol = mix(vec3(0.38,0.21,0.38), vec3(1.02,0.60,0.45),
-                  pow(sunAz,2.0)*(0.35+0.65*smoothstep(0.4,0.05,rd.y)));
-  col = mix(col, ccol, ca);
-  // crisp low sun disc inside the glow
-  col += vec3(1.3,0.85,0.60)*smoothstep(0.99930, 0.99975, dot(rd, SUN))*2.2;
-  // second, finer cloud layer
-  float cd2 = fbm(cuv*vec2(2.6,5.0) + vec2(uTime*0.010, 3.7));
-  float ca2 = smoothstep(0.60, 0.90, cd2)*smoothstep(0.05, 0.30, rd.y)*0.25;
-  col = mix(col, ccol*0.9, ca2);
-  // treeline silhouette on the horizon
-  float az = atan(rd.x, -rd.z);
-  float hillH = 0.016 + 0.022*noise2(vec2(az*2.3+7.1, 3.7)) + 0.014*noise2(vec2(az*9.0, 9.2))
-              + 0.006*noise2(vec2(az*25.0, 4.1));
-  float hill = smoothstep(hillH+0.004, hillH-0.006, rd.y);
-  vec3 treeCol = mix(vec3(0.30,0.16,0.24), vec3(0.55,0.28,0.30), smoothstep(0.0, 0.05, rd.y));
-  col = mix(col, treeCol, hill*0.9);
-  if(rd.y > 0.12){
-    vec2 sp = rd.xz/(rd.y+0.4)*22.0;
-    vec2 id = floor(sp);
-    float st = hash2(id);
-    if(st > 0.982){
-      vec2 gv = fract(sp)-0.5;
-      vec2 off = vec2(hash2(id+7.0), hash2(id+13.0))-0.5;
-      float dd = length(gv - off*0.6);
-      float tw = 0.55+0.45*sin(uTime*2.0+st*40.0);
-      col += vec3(1.0,0.92,0.85)*smoothstep(0.10,0.0,dd)*smoothstep(0.12,0.45,rd.y)*tw*0.5;
-    }
-  }
-  return col;
-}
+// the whole light rig: one hard warm key raking in from behind, and almost
+// nothing else. On black, the petal edges and the glow through them are the shot.
+const vec3 KEY  = normalize(vec3(-0.62, 0.42, -0.66));
+const vec3 KEYC = vec3(1.00, 0.80, 0.60);
+const vec3 RIMC = vec3(1.00, 0.72, 0.52);
 
-vec3 petalAlbedo(float v, float hgt, float stripe, float mat){
-  vec3 deep, light;
-  if(v < 0.5)      { deep=vec3(0.48,0.015,0.030); light=vec3(0.92,0.10,0.09); } // scarlet
-  else if(v < 1.5) { deep=vec3(0.55,0.040,0.140); light=vec3(0.98,0.30,0.45); } // rose-pink
-  else             { deep=vec3(0.72,0.160,0.220); light=vec3(0.99,0.73,0.72); } // blush cream
-  vec3 col = mix(deep, light, smoothstep(0.0,1.0,hgt));
-  col = mix(vec3(0.50,0.40,0.14), col, smoothstep(0.0,0.08,hgt)); // subtle warm base
-  col *= 0.92 + 0.08*stripe;
-  vec3 bud = vec3(0.14,0.26,0.09)*(0.7+0.6*hgt);                  // immature green bud
-  // pigment floods from the tip downward, the way real buds color up
-  return mix(bud, col, clamp(mat*1.35 - (1.0-hgt)*0.35, 0.0, 1.0));
-}
-
-vec3 render(vec3 ro, vec3 rd){
+vec3 render(vec3 ro, vec3 rd, out float depth){
   vec2 tm = march(ro, rd);
+  depth = tm.x;
   if(tm.y < 0.0){
-    vec3 sky = skyColor(rd);
-    if(rd.y < 0.0){
-      // beyond march range the field continues as banded color to the horizon
-      float tg = -(ro.y+0.02)/rd.y;
-      vec2 wp = ro.xz + rd.xz*tg;
-      float v = bandVariant(wp.y);
-      vec3 pc = v < 0.5 ? vec3(0.62,0.05,0.05) : (v < 1.5 ? vec3(0.72,0.13,0.26) : vec3(0.85,0.48,0.48));
-      float n = noise2(wp*1.3)*0.5 + noise2(wp*5.1)*0.5;
-      vec3 carpet = mix(vec3(0.045,0.075,0.030), pc*0.8, (0.32+0.42*n)*uBloom);
-      float rowFade = exp(-max(tg-24.0, 0.0)*0.03);
-      carpet *= 1.0 - 0.25*(0.5+0.5*cos(wp.x/SP*6.2832))*rowFade;
-      carpet *= 0.9 + 0.5*pow(clamp(dot(rd,SUN)*0.5+0.5, 0.0, 1.0), 2.0);
-      float sunF = pow(clamp(dot(rd, SUN)*0.5+0.5, 0.0, 1.0), 3.0);
-      vec3 fogC = mix(vec3(0.44,0.26,0.36), vec3(0.86,0.49,0.37), sunF);
-      float fo = 1.0 - exp(-0.030*tg - 0.00035*tg*tg);
-      return mix(carpet, fogC, min(clamp(fo, 0.0, 1.0), 0.70));
-    }
-    return sky;
+    depth = 1e3;
+    return vec3(0.0);                       // pure black void
   }
   vec3 pos = ro + rd*tm.x;
   vec3 N = calcNormal(pos);
   float m = tm.y;
 
-  vec3 alb; float specStr=0.15, specPow=24.0, sssAmt=0.0, thin=1.0;
-  if(m < 1.5){
-    float f1 = fbm(pos.xz*0.75+2.7);
-    float f2 = fbm(pos.xz*6.0+13.0);
-    vec3 soil  = mix(vec3(0.060,0.040,0.026), vec3(0.110,0.078,0.046), f2);
-    vec3 grass = mix(vec3(0.024,0.062,0.017), vec3(0.062,0.135,0.040), f2);
-    alb = mix(soil, grass, smoothstep(0.28,0.62,f1));
-    float b0 = fbm(pos.xz*7.0);
-    float bx = fbm(vec2(pos.x+0.06, pos.z)*7.0) - b0;
-    float bz = fbm(vec2(pos.x, pos.z+0.06)*7.0) - b0;
-    N = normalize(N + vec3(-bx, 0.10, -bz)*1.4);
-    // planting rows run into the distance: ridge at each column, furrow between
-    float fr = 0.5+0.5*cos(pos.x/SP*6.2832);
-    alb *= 0.60 + 0.40*smoothstep(0.10, 0.90, fr);
-    N = normalize(N + vec3(sin(pos.x/SP*6.2832)*0.22, 0.0, 0.0));
-    specStr = 0.03;
-  } else if(m < 2.5){                       // field stem/leaf
-    float yt = clamp(pos.y/0.9, 0.0, 1.0);
-    alb = mix(vec3(0.045,0.140,0.035), vec3(0.100,0.260,0.080), yt);
-    specStr = 0.25; specPow = 20.0; sssAmt = 0.35;
-  } else if(m < 6.5){                       // field petal
-    vec2 cell = round(pos.xz / SP);
-    float open, fh, fhs, fph, variant, exist, fmat; vec2 off;
-    fieldParams(cell, open, fh, fhs, fph, variant, off, exist, fmat);
-    vec2 cc = cell*SP;
-    vec3 q = (pos - vec3(cc.x+off.x, fh, cc.y+off.y))/fhs;
-    float hgt = clamp((q.y-0.02)/0.42, 0.0, 1.0);
-    float stripe = 0.5+0.5*sin(atan(q.x, q.z)*15.0 + fph*10.0);
-    alb = petalAlbedo(m-3.0, hgt, stripe, fmat);
-    thin = 0.5+0.9*hgt;
-    specStr = 0.55; specPow = 36.0; sssAmt = mix(0.4, 1.0, fmat);
-  } else if(m < 7.5){                       // field pistil
-    alb = vec3(0.06,0.035,0.015);
-    specStr = 0.3;
-  } else if(m < 40.0){                      // hero petal
-    int i = int(m - 20.0 + 0.5);
-    float g, open, hh, hhs, hph, hnod, hmat; vec3 top;
-    heroParams(i, g, open, hh, top, hhs, hph, hnod, hmat);
-    vec3 q = (pos - top)/hhs; q.y -= 0.02;
-    float hgt = clamp(q.y/0.42, 0.0, 1.0);
-    float stripe = 0.5+0.5*sin(atan(q.x, q.z)*15.0 + hph*10.0);
-    alb = petalAlbedo(TD[i].w, hgt, stripe, hmat);
-    thin = 0.5+0.9*hgt;
-    specStr = 0.55; specPow = 36.0; sssAmt = mix(0.4, 1.0, hmat);
-  } else if(m < 60.0){                      // hero stem/leaf
-    float yt = clamp(pos.y/1.6, 0.0, 1.0);
-    alb = mix(vec3(0.045,0.140,0.035), vec3(0.100,0.260,0.080), yt);
-    specStr = 0.25; specPow = 20.0; sssAmt = 0.35;
-  } else {                                  // pistil
-    alb = vec3(0.06,0.035,0.015);
-    specStr = 0.3;
+  float rr = length(pos.xz);
+  float petT = clamp(rr/max(uP1.z, 1e-3), 0.0, 1.0);   // root -> edge
+
+  vec3 alb; float spec = 0.16, spow = 26.0, sss = 0.0;
+  if(m < 2.5){                                        // stem
+    alb = mix(vec3(0.030,0.075,0.028), vec3(0.070,0.150,0.055),
+              clamp(pos.y*0.5+1.0, 0.0, 1.0));
+    spec = 0.22; spow = 22.0; sss = 0.30;
+  } else if(m < 3.5){                                 // petal
+    float grain = fbm(vec2(atan(pos.z,pos.x)*3.0, pos.y*7.0 + rr*5.0));
+    alb = mix(uColA, uColB, smoothstep(0.10, 0.95, petT));
+    alb *= 0.90 + 0.20*grain;                         // faint veining
+    // deeper colour down in the throat where light does not reach
+    alb *= mix(0.72, 1.0, smoothstep(0.0, 0.35, petT));
+    spec = 0.20; spow = 30.0; sss = 1.0;
+  } else if(m < 4.5){                                 // centre
+    alb = uColC; spec = 0.12; spow = 16.0; sss = 0.25;
+  } else if(m < 5.5){                                 // stamens
+    alb = vec3(1.00, 0.72, 0.16); spec = 0.45; spow = 40.0; sss = 0.5;
+  } else {                                            // sepals
+    alb = vec3(0.055,0.115,0.045); spec = 0.18; spow = 20.0; sss = 0.55;
   }
 
-  float sh  = softShadow(pos + N*0.012, SUN);
-  sh = mix(sh, 0.90, smoothstep(9.0, 22.0, tm.x));
   float ao  = calcAO(pos, N);
-  float dif = clamp(dot(N, SUN), 0.0, 1.0)*sh;
-  float skyAmb = clamp(0.5 + 0.5*N.y, 0.0, 1.0);
-  float bnc = clamp(0.4 - 0.4*N.y, 0.0, 1.0);
-  vec3 sunCol = vec3(1.30, 0.78, 0.52)*2.9;
+  float sh  = softShadow(pos + N*0.004, KEY);
+  float ndl = dot(N, KEY);
+  float diff = max(ndl, 0.0);
+  float back = max(-ndl, 0.0);                        // key is behind this facet
 
-  vec3 lin = sunCol*dif
-           + vec3(0.40,0.24,0.46)*0.85*skyAmb*ao
-           + vec3(0.30,0.14,0.10)*0.8*bnc*ao;
-  vec3 col = alb*lin;
+  vec3 col = alb*diff*KEYC*1.02*mix(0.35, 1.0, sh);
 
-  // light transmitted through petals — the sun is behind them at golden hour
-  float back = clamp(dot(-N, SUN), 0.0, 1.0);
-  vec3 trans = alb*alb*2.2;
-  col += sssAmt * thin * trans * sunCol * pow(back, 1.7) * (0.3+0.7*sh) * 0.8;
+  // light bleeding through the petal -- the thing that sells a real bloom
+  float thin = 1.0 - 0.55*petT;
+  col += alb*pow(back, 1.30)*KEYC*sss*3.20*thin*mix(0.45, 1.0, sh);
 
-  float fres = pow(clamp(1.0+dot(N, rd), 0.0, 1.0), 3.0);
-  vec3 hlf = normalize(SUN - rd);
-  float spe = pow(clamp(dot(N, hlf), 0.0, 1.0), specPow)*dif;
-  col += specStr*spe*sunCol*(0.4+0.6*fres);
-  float sheen = pow(clamp(dot(N, hlf), 0.0, 1.0), 7.0)*dif;
-  col += specStr*0.35*sheen*sunCol;
-  col += fres*vec3(0.50,0.30,0.45)*0.15*ao*(sssAmt > 0.9 ? 1.0 : 0.3);
+  // rim along the silhouette
+  float fres = pow(clamp(1.0 - max(dot(N, -rd), 0.0), 0.0, 1.0), 3.0);
+  col += RIMC*fres*sss*0.52;
 
-  float sunF = pow(clamp(dot(rd, SUN)*0.5+0.5, 0.0, 1.0), 3.0);
-  vec3 fogCol = mix(vec3(0.40,0.23,0.33), vec3(0.80,0.44,0.33), sunF);
-  float fo = 1.0 - exp(-0.030*tm.x - 0.00035*tm.x*tm.x);
-  col = mix(col, fogCol, fo);
-  float mist = (1.0-exp(-0.06*tm.x)) * exp(-max(pos.y, 0.0)*3.0) * 0.10;
-  col = mix(col, fogCol*0.95, clamp(mist, 0.0, 1.0));
+  // specular sheen
+  vec3 H = normalize(KEY - rd);
+  col += KEYC*pow(max(dot(N,H), 0.0), spow)*spec*sh;
+
+  // a whisper of cool fill so the shadow side is not dead
+  col += alb*vec3(0.10,0.12,0.17)*(0.25 + 0.75*max(N.y,0.0))*ao*0.22;
+
   return col;
 }
 
@@ -541,31 +407,42 @@ void main(){
   vec2 fc = gl_FragCoord.xy;
   vec2 uv = (2.0*fc - uRes)/uRes.y;
 
-  float an = 0.035*sin(uTime*0.12) + uMouse.x*0.06;
-  float cy = 1.38 + 0.04*sin(uTime*0.17) + uMouse.y*0.10;
+  float an = 0.30 + 0.045*sin(uTime*0.11) + uMouse.x*0.07;
+  float el = 0.74 + 0.030*sin(uTime*0.15) + uMouse.y*0.09;   // look down into it
   float aspect = uRes.x/uRes.y;
-  float cd = mix(5.1, 3.6, smoothstep(0.75, 1.10, aspect));
-  vec3 ro = vec3(cd*sin(an), cy, cd*cos(an));
-  vec3 ta = vec3(0.0, 0.92, 0.0);
+  // Back off far enough that the bloom fits BOTH ways. The vertical field of
+  // view is fixed, so on a tall phone it is the horizontal one that clips --
+  // solve for each and take whichever needs more room.
+  float fit = 1.16;                               // half-extent we want in frame
+  float cdV = fit*1.55;                           // to fit top to bottom
+  float cdH = fit*1.55/max(aspect, 0.34);         // to fit side to side
+  float cd  = max(cdV, cdH);
+  // Aim at the heart of the bloom: that puts it dead centre, which is where
+  // her name goes, and lifts the whole flower to sit well in the frame.
+  vec3 ta = vec3(0.0, uP1.z*0.09, 0.0);
+  vec3 ro = ta + vec3(cd*cos(el)*sin(an), cd*sin(el), cd*cos(el)*cos(an));
   vec3 fw = normalize(ta - ro);
   vec3 rt = normalize(cross(fw, vec3(0.0,1.0,0.0)));
   vec3 up = cross(rt, fw);
   vec3 rd = normalize(uv.x*rt + uv.y*up + 1.55*fw);
 
-  vec3 col = render(ro, rd);
-  float sa = clamp(dot(rd, SUN), 0.0, 1.0);
-  col += vec3(1.2,0.75,0.50)*pow(sa, 6.0)*0.035;
-  col += vec3(1.3,0.90,0.65)*pow(sa,40.0)*0.15;
-  col = aces(col*1.05);
-  col = mix(col, col*col*(3.0-2.0*col), 0.34);
+  float depth;
+  vec3 col = render(ro, rd, depth);
+
+  col = aces(col*0.97);
+  col = mix(col, col*col*(3.0-2.0*col), 0.30);
   float lum = dot(col, vec3(0.299,0.587,0.114));
-  col = clamp(mix(vec3(lum), col, 1.24), 0.0, 1.0);
+  col = clamp(mix(vec3(lum), col, 1.20), 0.0, 1.0);
   col = pow(col, vec3(1.0/2.2));
 
   vec2 vq = fc/uRes;
-  col *= 0.30 + 0.70*pow(16.0*vq.x*vq.y*(1.0-vq.x)*(1.0-vq.y), 0.22);
-  col += (hash2(fc + fract(uTime)*vec2(17.0,23.0))-0.5)*0.006;
-  fragColor = vec4(col, 1.0);
+  col *= 0.34 + 0.66*pow(16.0*vq.x*vq.y*(1.0-vq.x)*(1.0-vq.y), 0.30);
+  col += (hash2(fc + fract(uTime)*vec2(17.0,23.0))-0.5)*0.007;
+
+  // depth goes out in alpha so the post pass can throw the background out of focus
+  float focus = length(ro - ta);
+  float coc = uDof*clamp((abs(depth - focus) - 0.14)/0.90, 0.0, 1.0);
+  fragColor = vec4(col, depth > 500.0 ? 0.0 : coc);
 }
 </script>
 
@@ -573,28 +450,72 @@ void main(){
 precision highp float;
 uniform sampler2D uTex;
 uniform vec2 uRes;
+uniform float uDof;
 out vec4 fragColor;
+
+// 12 points on a golden-angle spiral -- an even disc without a big tap count
+const int TAPS = 12;
+
 void main(){
   vec2 px = 1.0/uRes;
   vec2 uv = gl_FragCoord.xy*px;
-  vec3 rgbNW = texture(uTex, uv+vec2(-1.0,-1.0)*px).rgb;
-  vec3 rgbNE = texture(uTex, uv+vec2( 1.0,-1.0)*px).rgb;
-  vec3 rgbSW = texture(uTex, uv+vec2(-1.0, 1.0)*px).rgb;
-  vec3 rgbSE = texture(uTex, uv+vec2( 1.0, 1.0)*px).rgb;
-  vec3 rgbM  = texture(uTex, uv).rgb;
-  vec3 luma = vec3(0.299, 0.587, 0.114);
-  float lNW = dot(rgbNW, luma), lNE = dot(rgbNE, luma);
-  float lSW = dot(rgbSW, luma), lSE = dot(rgbSE, luma), lM = dot(rgbM, luma);
-  float lMin = min(lM, min(min(lNW, lNE), min(lSW, lSE)));
-  float lMax = max(lM, max(max(lNW, lNE), max(lSW, lSE)));
-  vec2 dir = vec2(-((lNW+lNE)-(lSW+lSE)), ((lNW+lSW)-(lNE+lSE)));
-  float dirReduce = max((lNW+lNE+lSW+lSE)*0.03125, 0.0078125);
-  float rcpDirMin = 1.0/(min(abs(dir.x), abs(dir.y))+dirReduce);
-  dir = clamp(dir*rcpDirMin, vec2(-8.0), vec2(8.0))*px;
-  vec3 rgbA = 0.5*(texture(uTex, uv+dir*(1.0/3.0-0.5)).rgb + texture(uTex, uv+dir*(2.0/3.0-0.5)).rgb);
-  vec3 rgbB = rgbA*0.5 + 0.25*(texture(uTex, uv+dir*-0.5).rgb + texture(uTex, uv+dir*0.5).rgb);
-  float lB = dot(rgbB, luma);
-  fragColor = vec4((lB < lMin || lB > lMax) ? rgbA : rgbB, 1.0);
+  vec4 c = texture(uTex, uv);
+  vec3 col = c.rgb;
+
+  // ---- depth of field: the reference shot is nearly all bokeh ----
+  float coc = c.a;
+  if(uDof > 0.5 && coc > 0.02){
+    float rad = coc*11.0;
+    vec3 acc = col; float wsum = 1.0;
+    for(int i=0;i<TAPS;i++){
+      float fi = float(i);
+      float a  = fi*2.39996;
+      float r  = sqrt((fi+0.5)/float(TAPS))*rad;
+      vec4 s = texture(uTex, uv + vec2(cos(a), sin(a))*r*px);
+      // only let equally-or-more blurred neighbours bleed in, so sharp
+      // petals do not smear over the background
+      float w = smoothstep(0.0, 0.35, s.a - coc + 0.35);
+      acc += s.rgb*w; wsum += w;
+    }
+    col = acc/wsum;
+  }
+
+  // ---- veiling glow off the bright rim-lit edges ----
+  vec3 glow = vec3(0.0);
+  for(int i=0;i<8;i++){
+    float fi = float(i);
+    float a = fi*2.39996 + 0.7;
+    float r = (1.0 + fi*0.55)*3.4;
+    vec3 s = texture(uTex, uv + vec2(cos(a), sin(a))*r*px).rgb;
+    glow += max(s - 0.62, 0.0);
+  }
+  col += glow*(1.0/8.0)*0.70;
+
+  // ---- FXAA, only where the frame is still sharp ----
+  if(coc < 0.14){
+    vec3 nw = texture(uTex, uv+vec2(-1.0,-1.0)*px).rgb;
+    vec3 ne = texture(uTex, uv+vec2( 1.0,-1.0)*px).rgb;
+    vec3 sw = texture(uTex, uv+vec2(-1.0, 1.0)*px).rgb;
+    vec3 se = texture(uTex, uv+vec2( 1.0, 1.0)*px).rgb;
+    vec3 luma = vec3(0.299, 0.587, 0.114);
+    float lNW = dot(nw,luma), lNE = dot(ne,luma);
+    float lSW = dot(sw,luma), lSE = dot(se,luma), lM = dot(col,luma);
+    float lMin = min(lM, min(min(lNW,lNE), min(lSW,lSE)));
+    float lMax = max(lM, max(max(lNW,lNE), max(lSW,lSE)));
+    vec2 dir = vec2(-((lNW+lNE)-(lSW+lSE)), ((lNW+lSW)-(lNE+lSE)));
+    float dirReduce = max((lNW+lNE+lSW+lSE)*0.03125, 0.0078125);
+    float rcpDirMin = 1.0/(min(abs(dir.x), abs(dir.y))+dirReduce);
+    dir = clamp(dir*rcpDirMin, vec2(-8.0), vec2(8.0))*px;
+    vec3 rgbA = 0.5*(texture(uTex, uv+dir*(1.0/3.0-0.5)).rgb +
+                     texture(uTex, uv+dir*(2.0/3.0-0.5)).rgb);
+    vec3 rgbB = rgbA*0.5 + 0.25*(texture(uTex, uv+dir*-0.5).rgb +
+                                 texture(uTex, uv+dir*0.5).rgb);
+    float lB = dot(rgbB, luma);
+    vec3 aa = (lB < lMin || lB > lMax) ? rgbA : rgbB;
+    col = mix(aa, col, smoothstep(0.02, 0.14, coc));
+  }
+
+  fragColor = vec4(col, 1.0);
 }
 </script>
 
@@ -604,6 +525,91 @@ void main(){
 
   // filled in once the GL context exists (below); the buzz reads it lazily at send time
   var glRendererInfo = '';
+
+  var params0 = new URLSearchParams(location.search);
+
+  // -------------------------------------------------------------------------
+  // Which flower she gets. One parameterised bloom drives all of these; a
+  // species is just a bundle of numbers, so every visit can be a new flower.
+  //   arch 0 dense spiral | 1 sculptural few | 2 flat rays | 3 simple five
+  //   W whorls, N petals per whorl, ln length, wd width, cu curl, cp cup,
+  //   rf ruffle, tp tip sharpness, to/ti open tilt outer/inner, cs centre,
+  //   st stamens, a/b petal base/edge colour, c centre colour
+  // -------------------------------------------------------------------------
+  var SPECIES = [
+    {n:'garden rose',   e:'🌹', arch:0, W:6, N:8,  ln:0.86, wd:0.44, cu:0.34, cp:0.95, rf:0.35, tp:0.15, to:1.62, ti:0.50, cs:0.09, st:0,
+     a:[0.95,0.80,0.76], b:[1.00,0.62,0.60], c:[0.98,0.85,0.72]},
+    {n:'peony',         e:'🌸', arch:0, W:6, N:9,  ln:0.90, wd:0.50, cu:0.38, cp:1.05, rf:0.55, tp:0.10, to:1.70, ti:0.55, cs:0.08, st:0,
+     a:[0.92,0.42,0.48], b:[1.00,0.74,0.78], c:[0.95,0.80,0.60]},
+    {n:'dahlia',        e:'🌺', arch:0, W:6, N:10, ln:0.84, wd:0.32, cu:0.26, cp:0.80, rf:0.20, tp:0.45, to:1.52, ti:0.60, cs:0.10, st:0,
+     a:[0.55,0.12,0.34], b:[0.92,0.35,0.62], c:[0.85,0.55,0.35]},
+    {n:'ranunculus',    e:'🌼', arch:0, W:6, N:9,  ln:0.80, wd:0.42, cu:0.30, cp:1.00, rf:0.30, tp:0.12, to:1.48, ti:0.45, cs:0.07, st:0,
+     a:[0.98,0.86,0.45], b:[1.00,0.96,0.82], c:[0.85,0.75,0.35]},
+
+    {n:'tulip',         e:'🌷', arch:1, W:2, N:4,  ln:0.94, wd:0.30, cu:0.14, cp:0.85, rf:0.10, tp:0.50, to:0.62, ti:0.40, cs:0.08, st:0,
+     a:[0.78,0.06,0.09], b:[1.00,0.32,0.18], c:[0.28,0.20,0.10]},
+    {n:'lily',          e:'🌸', arch:1, W:2, N:3,  ln:0.96, wd:0.26, cu:0.50, cp:0.55, rf:0.14, tp:0.80, to:1.15, ti:0.86, cs:0.07, st:1,
+     a:[0.98,0.94,0.92], b:[1.00,0.70,0.74], c:[0.90,0.78,0.50]},
+    {n:'magnolia',      e:'🌸', arch:1, W:2, N:5,  ln:0.90, wd:0.32, cu:0.16, cp:0.90, rf:0.08, tp:0.30, to:0.78, ti:0.48, cs:0.09, st:0,
+     a:[0.98,0.92,0.94], b:[0.95,0.72,0.80], c:[0.80,0.70,0.45]},
+
+    {n:'lotus',         e:'🪷', arch:2, W:5, N:14, ln:0.90, wd:0.19, cu:0.20, cp:0.55, rf:0.12, tp:0.80, to:1.46, ti:0.80, cs:0.15, st:1,
+     a:[0.96,0.78,0.82], b:[1.00,0.93,0.93], c:[0.95,0.85,0.40]},
+    {n:'water lily',    e:'🪷', arch:2, W:5, N:16, ln:0.88, wd:0.16, cu:0.16, cp:0.48, rf:0.10, tp:0.86, to:1.56, ti:0.88, cs:0.16, st:1,
+     a:[0.98,0.96,0.93], b:[1.00,1.00,0.98], c:[1.00,0.82,0.25]},
+    {n:'chrysanthemum', e:'🌼', arch:2, W:6, N:18, ln:0.84, wd:0.13, cu:0.26, cp:0.42, rf:0.16, tp:0.90, to:1.62, ti:0.70, cs:0.11, st:0,
+     a:[0.95,0.62,0.10], b:[1.00,0.88,0.42], c:[0.75,0.50,0.12]},
+
+    {n:'cherry blossom',e:'🌸', arch:3, W:1, N:5,  ln:0.80, wd:0.42, cu:0.22, cp:0.22, rf:0.14, tp:0.20, to:1.30, ti:1.30, cs:0.13, st:1,
+     a:[1.00,0.90,0.93], b:[1.00,0.74,0.82], c:[0.95,0.80,0.35]},
+    {n:'cosmos',        e:'🌸', arch:3, W:1, N:8,  ln:0.82, wd:0.34, cu:0.18, cp:0.20, rf:0.22, tp:0.30, to:1.36, ti:1.36, cs:0.14, st:1,
+     a:[1.00,0.86,0.90], b:[0.98,0.62,0.74], c:[1.00,0.85,0.30]},
+    {n:'anemone',       e:'🌼', arch:3, W:1, N:6,  ln:0.78, wd:0.40, cu:0.22, cp:0.24, rf:0.12, tp:0.25, to:1.28, ti:1.28, cs:0.15, st:1,
+     a:[0.98,0.96,0.95], b:[1.00,1.00,1.00], c:[0.10,0.08,0.12]}
+  ];
+
+  // pick one, but never the same flower she saw last time
+  var flower, flowerSeed = Math.random();
+  (function(){
+    var forced = parseInt(params0.get('f'), 10);
+    if(!isNaN(forced) && forced >= 0 && forced < SPECIES.length){ flower = SPECIES[forced]; return; }
+    var last = -1;
+    try{ last = parseInt(localStorage.getItem('tulips_lastFlower') || '-1', 10); }catch(e){}
+    var pool = [];
+    for(var i=0;i<SPECIES.length;i++) if(i !== last) pool.push(i);
+    var pick = pool[(Math.random()*pool.length)|0];
+    try{ localStorage.setItem('tulips_lastFlower', String(pick)); }catch(e){}
+    flower = SPECIES[pick];
+  })();
+
+  // and jitter it, so even the same species is never quite the same bloom twice
+  var fj = (function(){
+    function r(){ return Math.random(); }
+    var warm = (r()*2-1);                       // shifts the whole flower warm/cool
+    function tint(c){
+      return [Math.min(1, c[0]*(1+0.10*warm)),
+              Math.min(1, c[1]*(1+0.02*warm)),
+              Math.min(1, c[2]*(1-0.10*warm))];
+    }
+    var f = flower;
+    return {
+      arch: f.arch,
+      W: f.W,
+      N: Math.max(3, f.N + ((r()<0.5) ? 0 : (r()<0.5 ? -1 : 1))),
+      ln: f.ln*(0.94 + r()*0.12),
+      wd: f.wd*(0.93 + r()*0.14),
+      cu: f.cu*(0.85 + r()*0.30),
+      cp: f.cp*(0.90 + r()*0.20),
+      rf: f.rf*(0.75 + r()*0.50),
+      tp: f.tp,
+      to: f.to*(0.95 + r()*0.10),
+      ti: f.ti*(0.92 + r()*0.16),
+      cs: f.cs, st: f.st,
+      a: tint(f.a), b: tint(f.b), c: f.c,
+      name: f.n, emoji: f.e
+    };
+  })();
+  try{ window.__flower = fj.name; window.__flowerN = SPECIES.length; }catch(e){}
 
   // --- ntfy: buzz Jon's phone when the page is opened, and again if she stays ---
   (function(){
@@ -715,6 +721,7 @@ void main(){
       // never let a context line break the buzz itself — the buzz is the point
       try{
         return '\n\ud83d\udd50 ' + [tz, lang, dev, app].filter(Boolean).join(' \u00b7 ') +
+               '\n' + fj.emoji + ' ' + fj.name +
                '\n\ud83d\udc46 ' + gate + ' \u00b7 ' + taps + ' interactions \u00b7 ' + origin() +
                '\n\ud83d\udcbb ' + gpu() + ' \u00b7 ' + hw();
       }catch(e){ return '\n\ud83d\udd50 ' + [tz, lang, dev, app].filter(Boolean).join(' \u00b7 '); }
@@ -808,6 +815,7 @@ void main(){
   }catch(e){ glRendererInfo = 'gpu-unknown'; }
 
   var glLog = [];
+  try{ window.__glLog = glLog; }catch(e){}   // so a compile failure is easy to spot
   // run a callback only once the page is actually on-screen (never during a hidden
   // link-preview/prefetch load) — this keeps the scene out of preview screenshots
   function whenVisible(cb){
@@ -821,6 +829,11 @@ void main(){
   function showFallback(){
     document.getElementById('nameWrap').style.display = 'none';
     canvas.style.display = 'none';
+    // even the no-WebGL fallback shows tonight's flower rather than a fixed tulip
+    try{
+      document.getElementById('fbEmoji').textContent =
+        new Array(5).fill(fj.emoji).join(' ');
+    }catch(e){}
     whenVisible(function(){ document.getElementById('fallback').style.display = 'flex'; });
     window.__ready = true;
     if(params.get('debug') === '1'){
@@ -843,7 +856,9 @@ void main(){
                  ' | ' + gl.getParameter(gl.VERSION);
         }
       }catch(e){ info = 'gpu-info-error: ' + e; }
-      pre.textContent = 'RENDERER: ' + info + '\n\n' + (glLog.join('\n\n') || '(no shader log captured)');
+      pre.textContent = 'FLOWER: ' + fj.name + '  (arch ' + fj.arch + ', ' +
+                        fj.W + ' whorls x ' + fj.N + ')\nRENDERER: ' + info +
+                        '\n\n' + (glLog.join('\n\n') || '(no shader log captured)');
       document.body.appendChild(pre);
     }
   }
@@ -870,7 +885,8 @@ void main(){
     console.error(glLog[glLog.length-1]); showFallback(); return;
   }
   var U = {};
-  ['uRes','uTime','uBloom','uMouse'].forEach(function(n){ U[n] = gl.getUniformLocation(prog, n); });
+  ['uRes','uTime','uBloom','uMouse','uArch','uP1','uP2','uP3',
+   'uColA','uColB','uColC','uSeed','uDof'].forEach(function(n){ U[n] = gl.getUniformLocation(prog, n); });
   // FXAA pass: scene renders offscreen, edges resolved on the way to the canvas
   var vs2 = sh(gl.VERTEX_SHADER, vsSrc);
   var fs2 = sh(gl.FRAGMENT_SHADER, document.getElementById('fsPost').textContent.trim());
@@ -883,6 +899,7 @@ void main(){
     } else {
       UP.uTex = gl.getUniformLocation(progPost, 'uTex');
       UP.uRes = gl.getUniformLocation(progPost, 'uRes');
+      UP.uDof = gl.getUniformLocation(progPost, 'uDof');
     }
   }
   var fbo = gl.createFramebuffer();
@@ -904,6 +921,8 @@ void main(){
   var scales = [1.0, 0.85, 0.7, 0.58, 0.48, 0.4, 0.33];
   var level = (Math.min(innerWidth, innerHeight) < 700 || matchMedia('(pointer: coarse)').matches) ? 2 : 0;
   var levelFixed = false;
+  // depth of field is the most expensive bit of polish, so only the top tiers get it
+  var dofOn = true;
   if(!isNaN(qParam)){ level = Math.min(Math.max(qParam,0),5); levelFixed = true; }
   var dpr = Math.min(devicePixelRatio || 1, 1.75);
   try{
@@ -921,18 +940,11 @@ void main(){
     if(progPost) allocTarget();
   }
   var nameWrapEl = document.getElementById('nameWrap');
+  // The shader aims the camera straight at the heart of the flower (ta), so the
+  // heart lands dead centre by construction and her name just goes there. No
+  // projection to keep in sync with the shader -- it cannot drift.
   function placeName(){
-    var W = innerWidth, H = innerHeight;
-    var a = W/H;
-    var s = Math.min(Math.max((a-0.75)/(1.10-0.75), 0), 1); s = s*s*(3-2*s);
-    var cdist = 5.1 + (3.6-5.1)*s;
-    var roY = 1.38, taY = 0.92;
-    var fY = taY-roY, fZ = -cdist, fL = Math.hypot(fY, fZ);
-    fY /= fL; fZ /= fL;
-    var uY = -fZ, uZ = fY;               // camera up vector (x components are 0)
-    var dy = 1.86-roY, dz = 1.70-cdist;  // world anchor at the heart of the arc
-    var yc = dy*uY + dz*uZ, zc = dy*fY + dz*fZ;
-    nameWrapEl.style.top = (H/2 - (1.55*yc/zc)*H/2) + 'px';
+    nameWrapEl.style.top = '50%';
   }
   addEventListener('resize', function(){ resize(); placeName(); });
   if(window.visualViewport) visualViewport.addEventListener('resize', function(){ resize(); placeName(); });
@@ -948,7 +960,7 @@ void main(){
   }
 
   var reveals = [
-    [9.0, 'nameWrap']
+    [11.5, 'nameWrap']   // the heart opens last, so her name lands on the climax
   ];
   var revealed = 0;
   function smooth(x){ x = Math.min(Math.max(x,0),1); return x*x*(3-2*x); }
@@ -956,6 +968,16 @@ void main(){
   // --- petals drifting down ---
   var petalLayer = document.getElementById('petals');
   var lastPetal = 0;
+  // drifting petals in the same colours as the flower on screen
+  var petalGrad = (function(){
+    function cs(c, k){
+      return 'rgb(' + c.map(function(v){
+        return Math.max(0, Math.min(255, Math.round(v*255*k)));
+      }).join(',') + ')';
+    }
+    return 'linear-gradient(135deg, ' + cs(fj.b,1.0) + ' 0%, ' +
+           cs(fj.a,0.92) + ' 55%, ' + cs(fj.a,0.55) + ' 100%)';
+  })();
   function spawnPetal(){
     if(petalLayer.childElementCount > 24) return;
     var p = document.createElement('div');
@@ -964,7 +986,8 @@ void main(){
     p.style.width  = size+'px';
     p.style.height = size*1.2+'px';
     p.style.left   = (Math.random()*100)+'vw';
-    p.style.filter = 'hue-rotate('+((Math.random()*30-15)|0)+'deg)';
+    p.style.background = petalGrad;
+    p.style.filter = 'brightness('+(0.85 + Math.random()*0.35).toFixed(2)+')';
     var dur = 9000 + Math.random()*8000;
     var dx1 = (Math.random()*2-1)*16, dx2 = dx1 + (Math.random()*2-1)*18;
     var r0 = (Math.random()*360)|0;
@@ -985,6 +1008,27 @@ void main(){
     ty = (e.clientY/innerHeight)*2-1;
   });
 
+  // --- ?debug=1 readout (works whether or not the scene renders) ---
+  var dbgEl = null;
+  if(params.get('debug') === '1' && gl){
+    dbgEl = document.createElement('pre');
+    dbgEl.style.cssText = 'position:fixed;left:10px;top:10px;z-index:99;margin:0;'+
+      'background:rgba(0,0,0,.62);color:#9fe6a0;font:11px/1.5 monospace;'+
+      'padding:7px 10px;border-radius:7px;pointer-events:none;white-space:pre';
+    document.body.appendChild(dbgEl);
+  }
+  function drawDebug(){
+    if(!dbgEl) return;
+    var rend = glRendererInfo || '?';
+    dbgEl.textContent =
+      'flower  ' + fj.name + '  (arch ' + fj.arch + ', ' + fj.W + 'x' + fj.N + ')\n' +
+      'frame   ' + emaDt.toFixed(1) + ' ms  (' + Math.round(1000/Math.max(emaDt,1)) + ' fps)\n' +
+      'quality tier ' + level + '/' + (scales.length-1) +
+      '   dof ' + (dofOn ? 'on' : 'off') + '\n' +
+      'canvas  ' + canvas.width + 'x' + canvas.height + '\n' +
+      'gpu     ' + rend.slice(0, 46);
+  }
+
   // --- frame loop ---
   var emaDt = 16, lastNow = performance.now(), frames = 0;
   function tick(){
@@ -996,10 +1040,11 @@ void main(){
       if(emaDt > 42 && level < scales.length-2){ level += 2; resize(); }
       else if(emaDt > 26 && level < scales.length-1){ level++; resize(); }
       else if(emaDt < 12.5 && level > 0 && frames % 90 === 0){ level--; resize(); }
+      dofOn = (level <= 2 && emaDt < 30);
     }
 
     var bt = started ? now - bloomStart : 0;
-    var bloom = smooth((bt - 0.5)/13.0);
+    var bloom = smooth((bt - 0.8)/15.5);   // slow open; whorls stagger inside the shader
 
     while(revealed < reveals.length && bt >= reveals[revealed][0]){
       var r = reveals[revealed++];
@@ -1012,13 +1057,23 @@ void main(){
     }
 
     mx += (tx-mx)*0.04; my += (ty-my)*0.04;
+    if(dbgEl) drawDebug();
 
-    var settled = started && (now - bloomStart) > 20.0 && !still;
+    var settled = started && (now - bloomStart) > 23.0 && !still;
     if(settled && (frames & 1) === 1){ window.__ready = true; requestAnimationFrame(tick); return; }
     gl.viewport(0,0,canvas.width,canvas.height);
     if(progPost) gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
     gl.useProgram(prog);
     gl.uniform2f(U.uRes, canvas.width, canvas.height);
+    gl.uniform1f(U.uArch, fj.arch);
+    gl.uniform4f(U.uP1, fj.W, fj.N, fj.ln, fj.wd);
+    gl.uniform4f(U.uP2, fj.cu, fj.cp, fj.rf, fj.tp);
+    gl.uniform4f(U.uP3, fj.to, fj.ti, fj.cs, fj.st);
+    gl.uniform3f(U.uColA, fj.a[0], fj.a[1], fj.a[2]);
+    gl.uniform3f(U.uColB, fj.b[0], fj.b[1], fj.b[2]);
+    gl.uniform3f(U.uColC, fj.c[0], fj.c[1], fj.c[2]);
+    gl.uniform1f(U.uSeed, flowerSeed);
+    gl.uniform1f(U.uDof, dofOn ? 1.0 : 0.0);
     gl.uniform1f(U.uTime, now - loadT);
     gl.uniform1f(U.uBloom, bloom);
     gl.uniform2f(U.uMouse, mx, -my);
@@ -1030,6 +1085,7 @@ void main(){
       gl.bindTexture(gl.TEXTURE_2D, sceneTex);
       gl.uniform1i(UP.uTex, 0);
       gl.uniform2f(UP.uRes, canvas.width, canvas.height);
+      gl.uniform1f(UP.uDof, dofOn ? 1.0 : 0.0);
       gl.drawArrays(gl.TRIANGLES, 0, 3);
     }
     if(still && frames > 2){ gl.finish(); window.__ready = true; return; }
