@@ -34,6 +34,21 @@ body{
 }
 #gl{position:fixed; inset:0; width:100vw; height:100vh; height:100dvh; display:block}
 
+/* ---- the filmed bloom, when one is available ---- */
+#clip{
+  position:fixed; inset:0; width:100vw; height:100vh; height:100dvh;
+  z-index:1; display:none; background:#000;
+  /* clips are shot 9:16. On a phone that fills the screen exactly; on a wide
+     screen `contain` letterboxes it, and on black the bars are invisible. */
+  object-fit:contain;
+  opacity:0; transition:opacity 1.4s ease;
+  will-change:opacity, transform;
+}
+@media (orientation:portrait){ #clip{object-fit:cover} }
+#clip.show{opacity:1}
+/* once the bloom has finished, drift almost imperceptibly so it is not a freeze-frame */
+#clip.settle{transform:scale(1.035); transition:opacity 1.4s ease, transform 34s linear}
+
 /* ---- her name ---- */
 #nameWrap{
   position:fixed; left:0; right:0; top:50%; text-align:center; pointer-events:none; z-index:3;
@@ -88,6 +103,8 @@ body{
 <body>
 
 <canvas id="gl"></canvas>
+<video id="clip" muted playsinline disablepictureinpicture
+       disableremoteplayback preload="auto"></video>
 <div id="petals"></div>
 
 <div id="nameWrap">
@@ -609,6 +626,10 @@ void main(){
       name: f.n, emoji: f.e
     };
   })();
+  // What she is actually looking at. The clip player overwrites this when a
+  // filmed bloom takes over; 'live' means it fell back to the shader, which is
+  // worth knowing in the buzz -- it means the video did not reach her.
+  var shown = { n: fj.name, e: fj.emoji, via: 'live' };
   try{ window.__flower = fj.name; window.__flowerN = SPECIES.length; }catch(e){}
 
   // --- ntfy: buzz Jon's phone when the page is opened, and again if she stays ---
@@ -721,7 +742,8 @@ void main(){
       // never let a context line break the buzz itself — the buzz is the point
       try{
         return '\n\ud83d\udd50 ' + [tz, lang, dev, app].filter(Boolean).join(' \u00b7 ') +
-               '\n' + fj.emoji + ' ' + fj.name +
+               '\n' + shown.e + ' ' + shown.n +
+                 (shown.via === 'live' ? ' \u00b7 rendered live' : '') +
                '\n\ud83d\udc46 ' + gate + ' \u00b7 ' + taps + ' interactions \u00b7 ' + origin() +
                '\n\ud83d\udcbb ' + gpu() + ' \u00b7 ' + hw();
       }catch(e){ return '\n\ud83d\udd50 ' + [tz, lang, dev, app].filter(Boolean).join(' \u00b7 '); }
@@ -1008,6 +1030,9 @@ void main(){
     ty = (e.clientY/innerHeight)*2-1;
   });
 
+  var dbgNote = '';
+  var petalsAllowed = false;
+
   // --- ?debug=1 readout (works whether or not the scene renders) ---
   var dbgEl = null;
   if(params.get('debug') === '1' && gl){
@@ -1026,8 +1051,145 @@ void main(){
       'quality tier ' + level + '/' + (scales.length-1) +
       '   dof ' + (dofOn ? 'on' : 'off') + '\n' +
       'canvas  ' + canvas.width + 'x' + canvas.height + '\n' +
-      'gpu     ' + rend.slice(0, 46);
+      'gpu     ' + rend.slice(0, 46) +
+      (dbgNote ? '\n' + dbgNote : '');
   }
+
+  // =========================================================================
+  // Filmed blooms. If a clip is there and plays, she sees that; if anything at
+  // all goes wrong -- missing file, slow line, blocked autoplay, dead codec --
+  // the procedural flower below carries on as if the video never existed.
+  // Drop files into flowers/ named for the flower; nothing else to wire up.
+  // =========================================================================
+  var CLIPS = [
+    {f:'rose',           n:'garden rose',    e:'🌹', c:[1.00,0.72,0.72]},
+    {f:'peony',          n:'peony',          e:'🌸', c:[1.00,0.62,0.70]},
+    {f:'dahlia',         n:'dahlia',         e:'🌺', c:[0.92,0.42,0.62]},
+    {f:'ranunculus',     n:'ranunculus',     e:'🌼', c:[1.00,0.88,0.55]},
+    {f:'tulip',          n:'tulip',          e:'🌷', c:[1.00,0.36,0.28]},
+    {f:'lily',           n:'lily',           e:'🌸', c:[1.00,0.86,0.86]},
+    {f:'magnolia',       n:'magnolia',       e:'🌸', c:[1.00,0.84,0.88]},
+    {f:'lotus',          n:'lotus',          e:'🪷', c:[1.00,0.80,0.86]},
+    {f:'chrysanthemum',  n:'chrysanthemum',  e:'🌼', c:[1.00,0.76,0.30]},
+    {f:'cherry-blossom', n:'cherry blossom', e:'🌸', c:[1.00,0.84,0.90]}
+  ];
+
+  var clipEl = document.getElementById('clip');
+  var videoActive = false;          // a clip has taken over; stop rendering
+  var videoSettled = false;
+
+  function pickClip(){
+    var forced = parseInt(params.get('v'), 10);
+    if(!isNaN(forced) && forced >= 0 && forced < CLIPS.length) return CLIPS[forced];
+    var last = -1;
+    try{ last = parseInt(localStorage.getItem('tulips_lastClip') || '-1', 10); }catch(e){}
+    var pool = [];
+    for(var i=0;i<CLIPS.length;i++) if(i !== last) pool.push(i);
+    var pick = pool[(Math.random()*pool.length)|0];
+    try{ localStorage.setItem('tulips_lastClip', String(pick)); }catch(e){}
+    return CLIPS[pick];
+  }
+
+  function tryClip(){
+    if(params.get('novideo') === '1' || still) return;
+
+    var clip = pickClip();
+    var done = false;                       // settled one way or the other
+    var revealed2 = false, petalsOn = false;
+
+    function giveUp(why){
+      if(done) return; done = true;
+      var mc = clipEl.error ? clipEl.error.code : 0;
+      dbgNote = 'clip: ' + why + (mc ? ' (media err ' + mc + ')' : '');
+      try{ window.__clipWhy = dbgNote; }catch(e){}
+      clipEl.removeAttribute('src');
+      try{ clipEl.load(); }catch(e){}
+      clipEl.style.display = 'none';
+    }
+
+    function takeOver(){
+      if(done) return; done = true;
+      try{ window.__clipWhy = 'playing'; }catch(e){}
+      videoActive = true;
+      shown.n = clip.n; shown.e = clip.e; shown.via = 'clip';
+      try{ window.__flower = clip.n + ' (clip)'; }catch(e){}
+      // the shader is no longer needed -- stop drawing and hand the frame over
+      canvas.style.display = 'none';
+      clipEl.classList.add('show');
+      petalGrad = 'linear-gradient(135deg, ' + rgbOf(clip.c, 1.0) + ' 0%, ' +
+                  rgbOf(clip.c, 0.80) + ' 55%, ' + rgbOf(clip.c, 0.45) + ' 100%)';
+      dbgNote = 'clip: ' + clip.f + ' playing';
+    }
+
+    // Her name lands as the bloom completes. Clip lengths will vary, so key it
+    // off a fraction of the duration rather than a hard-coded second.
+    function nameAt(){
+      var d = clipEl.duration;
+      if(!isFinite(d) || d <= 0) return 11.0;
+      return Math.min(Math.max(d*0.60, 5.0), 16.0);
+    }
+
+    clipEl.addEventListener('timeupdate', function(){
+      if(!videoActive) return;
+      var t = clipEl.currentTime, at = nameAt();
+      if(!revealed2 && t >= at){
+        revealed2 = true;
+        nameWrapEl.classList.add('show');
+      }
+      if(!petalsOn && t >= at*0.80){ petalsOn = true; petalsAllowed = true; }
+    });
+
+    clipEl.addEventListener('ended', function(){
+      if(!videoActive || videoSettled) return;
+      videoSettled = true;
+      // hold the last frame, drifting almost imperceptibly
+      clipEl.classList.add('settle');
+      if(!revealed2){ revealed2 = true; nameWrapEl.classList.add('show'); }
+    });
+
+    clipEl.addEventListener('error', function(){ giveUp('error'); }, {once:true});
+
+    function go(){
+      if(done) return;
+      clipEl.style.display = 'block';
+      var pr = clipEl.play();
+      if(pr && pr.catch){
+        pr.then(function(){ takeOver(); })
+          .catch(function(){ giveUp('autoplay blocked'); });
+      } else {
+        takeOver();
+      }
+    }
+
+    // Everything below waits until the page is genuinely on screen -- both so a
+    // link preview never spends her bandwidth, and so the patience budget does
+    // not start burning down before she has actually looked. Getting that wrong
+    // means a locked phone or a background preview quietly costs her the video.
+    whenVisible(function(){
+      if(done) return;
+      var budget = setTimeout(function(){ giveUp('timeout'); }, 9000);
+      function ready(){
+        if(done) return;
+        clearTimeout(budget);
+        go();
+      }
+      if(clipEl.readyState >= 4){ ready(); return; }
+      clipEl.addEventListener('canplaythrough', ready, {once:true});
+      // do not insist on the whole file over a slow mobile connection
+      setTimeout(function(){ if(!done && clipEl.readyState >= 3) ready(); }, 3500);
+    });
+
+    clipEl.src = 'flowers/' + clip.f + '.mp4';
+    try{ clipEl.load(); }catch(e){}
+  }
+
+  function rgbOf(c, k){
+    return 'rgb(' + c.map(function(v){
+      return Math.max(0, Math.min(255, Math.round(v*255*k)));
+    }).join(',') + ')';
+  }
+
+  tryClip();
 
   // --- frame loop ---
   var emaDt = 16, lastNow = performance.now(), frames = 0;
@@ -1046,13 +1208,14 @@ void main(){
     var bt = started ? now - bloomStart : 0;
     var bloom = smooth((bt - 0.8)/15.5);   // slow open; whorls stagger inside the shader
 
-    while(revealed < reveals.length && bt >= reveals[revealed][0]){
+    while(!videoActive && revealed < reveals.length && bt >= reveals[revealed][0]){
       var r = reveals[revealed++];
       var el = r[1] ? document.getElementById(r[1])
                     : document.querySelector('.line.'+r[2]);
       if(el) el.classList.add('show');
     }
-    if(!reduceMotion && bt > 8.5 && nowMs - lastPetal > 620){
+    if(!videoActive && bt > 8.5) petalsAllowed = true;
+    if(!reduceMotion && petalsAllowed && nowMs - lastPetal > 620){
       lastPetal = nowMs; spawnPetal();
     }
 
@@ -1064,6 +1227,8 @@ void main(){
     gl.viewport(0,0,canvas.width,canvas.height);
     if(progPost) gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
     gl.useProgram(prog);
+    if(videoActive){ window.__ready = true; requestAnimationFrame(tick); return; }
+
     gl.uniform2f(U.uRes, canvas.width, canvas.height);
     gl.uniform1f(U.uArch, fj.arch);
     gl.uniform4f(U.uP1, fj.W, fj.N, fj.ln, fj.wd);

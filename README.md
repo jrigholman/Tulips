@@ -1,7 +1,16 @@
 # Tulips 🌷
 
-One flower, blooming around Amy's name on black — a single self-contained web
-page (real-time raymarched WebGL2, embedded fonts, no external requests).
+One flower, blooming around Amy's name on black.
+
+There are two ways it can draw that flower, and it picks the best one available:
+
+1. **A filmed bloom** — a random clip from `flowers/`, if one is there and loads.
+2. **A procedural bloom** — a real-time raymarched WebGL2 flower, if no clip is
+   available, the connection is too slow, or autoplay is blocked.
+3. **A still** — her name and an emoji, if there is no WebGL2 either.
+
+Each rung falls through to the next on its own, so `flowers/` can be empty (or
+half full) and the page still works. See `flowers/README.md` to add clips.
 
 **A different flower every visit.** One parameterised bloom drives 13 species
 across four petal architectures, so each time she opens the link she gets a
@@ -32,7 +41,9 @@ A minute or two later it is live at **https://jrigholman.github.io/Tulips/**
 | Param | Effect |
 |---|---|
 | `?for=NAME` | Tags the visit for analytics, and names the recipient in the phone buzz |
-| `?f=0..12` | Force a specific species (index into the table above) |
+| `?f=0..12` | Force a specific procedural species (index into the table above) |
+| `?v=0..9` | Force a specific filmed clip |
+| `?novideo=1` | Skip the clips entirely and render procedurally |
 | `?t=SECONDS` | Jump to a point in the bloom timeline (negative values show the closed bud) |
 | `?debug=1` | On-screen readout: species, frame time, quality tier, canvas size, GPU |
 | `?q=0..6` | Force a quality tier and disable adaptive scaling |
