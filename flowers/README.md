@@ -6,10 +6,13 @@ that is missing, slow, or unplayable falls through to the procedural flower —
 so it is safe to add them one at a time.
 
 ```
-rose.mp4            peony.mp4          dahlia.mp4        ranunculus.mp4
-tulip.mp4           lily.mp4           magnolia.mp4      lotus.mp4
-chrysanthemum.mp4   cherry-blossom.mp4
+tulip.mp4      parrot.mp4     peony.mp4
+fringed.mp4    lily.mp4       rembrandt.mp4
 ```
+
+These are tulip *varieties* — classic, parrot, double peony-flowered, fringed,
+lily-flowered and Rembrandt. They look nothing like each other, so the page still
+hands out a visibly different flower each visit while staying true to the gift.
 
 To add, rename, or drop a flower, edit the `CLIPS` table in `index.html` — each
 row carries the filename, the display name used in the phone buzz, an emoji for

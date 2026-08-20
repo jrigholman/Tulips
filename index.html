@@ -1125,17 +1125,18 @@ void main(){
   // the procedural flower below carries on as if the video never existed.
   // Drop files into flowers/ named for the flower; nothing else to wire up.
   // =========================================================================
+  // Tulip varieties, because they are her favourite and the whole gift is tulips.
+  // They look nothing like each other, so it is still a different flower each time.
+  // Keep this list matched to what is actually in flowers/ -- an entry with no file
+  // just falls through to the procedural bloom, so listing absent clips only makes
+  // her see the fallback more often than she needs to.
   var CLIPS = [
-    {f:'rose',           n:'garden rose',    e:'🌹', c:[1.00,0.72,0.72]},
-    {f:'peony',          n:'peony',          e:'🌸', c:[1.00,0.62,0.70]},
-    {f:'dahlia',         n:'dahlia',         e:'🌺', c:[0.92,0.42,0.62]},
-    {f:'ranunculus',     n:'ranunculus',     e:'🌼', c:[1.00,0.88,0.55]},
-    {f:'tulip',          n:'tulip',          e:'🌷', c:[1.00,0.36,0.28]},
-    {f:'lily',           n:'lily',           e:'🌸', c:[1.00,0.86,0.86]},
-    {f:'magnolia',       n:'magnolia',       e:'🌸', c:[1.00,0.84,0.88]},
-    {f:'lotus',          n:'lotus',          e:'🪷', c:[1.00,0.80,0.86]},
-    {f:'chrysanthemum',  n:'chrysanthemum',  e:'🌼', c:[1.00,0.76,0.30]},
-    {f:'cherry-blossom', n:'cherry blossom', e:'🌸', c:[1.00,0.84,0.90]}
+    {f:'tulip',      n:'tulip',                e:'🌷', c:[1.00,0.80,0.45]},
+    {f:'parrot',     n:'parrot tulip',         e:'🌷', c:[1.00,0.62,0.48]},
+    {f:'peony',      n:'double peony tulip',   e:'🌷', c:[1.00,0.70,0.76]},
+    {f:'fringed',    n:'fringed tulip',        e:'🌷', c:[1.00,0.98,0.96]},
+    {f:'lily',       n:'lily-flowered tulip',  e:'🌷', c:[0.95,0.35,0.60]},
+    {f:'rembrandt',  n:'Rembrandt tulip',      e:'🌷', c:[1.00,0.72,0.66]}
   ];
 
   var clipEl = document.getElementById('clip');
