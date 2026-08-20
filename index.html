@@ -49,32 +49,41 @@ body{
 /* once the bloom has finished, drift almost imperceptibly so it is not a freeze-frame */
 #clip.settle{transform:scale(1.035); transition:opacity 1.4s ease, transform 34s linear}
 
-/* ---- her name ---- */
+/* ---- her name, written by the stem itself ---- */
+/* A single monoline path that draws itself on: it starts stem-green where it
+   comes down out of the flower and warms to ivory as it becomes writing. */
 #nameWrap{
-  position:fixed; left:0; right:0; top:50%; text-align:center; pointer-events:none; z-index:3;
-  transform:translateY(-50%);
-  opacity:0; filter:blur(6px);
-  transition:opacity 3.2s ease, filter 3.2s ease;
+  position:fixed; left:0; right:0; bottom:9vh; top:auto; text-align:center;
+  pointer-events:none; z-index:3;
+  opacity:0; transition:opacity .8s ease;
 }
-/* a soft pool of shade so the name reads over the heart of the flower */
-#nameWrap::before{
-  content:''; position:absolute; left:50%; top:50%; transform:translate(-50%,-50%);
-  width:min(84vw, 660px); height:min(48vh, 340px); z-index:-1; pointer-events:none;
-  background:radial-gradient(ellipse at center,
-    rgba(6,2,5,.60) 0%, rgba(6,2,5,.34) 44%, rgba(6,2,5,0) 74%);
+#nameWrap.show{opacity:1}
+#vine{width:min(88vw, 560px); height:auto; overflow:visible; display:block; margin:0 auto}
+@media (orientation:landscape){ #vine{width:min(42vw, 460px)} }
+#vine .ink{
+  fill:none; stroke:url(#vineGrad); stroke-width:7;
+  stroke-linecap:round; stroke-linejoin:round;
+  stroke-dasharray:var(--len, 1320); stroke-dashoffset:var(--len, 1320);
+  filter:drop-shadow(0 0 7px rgba(255,190,150,.45)) drop-shadow(0 0 22px rgba(255,120,140,.26));
 }
-#nameWrap.show{opacity:1; filter:blur(0)}
-#nameWrap #name{transition:transform 3.2s ease; transform:translateY(14px)}
-#nameWrap.show #name{transform:none}
-#name{
-  margin:0; font-family:'Great Vibes', 'Snell Roundhand', cursive; font-weight:400;
-  font-size:clamp(58px, 13.5vw, 152px); line-height:1.1; color:var(--ivory);
-  text-shadow:
-    0 0 10px rgba(0,0,0,.85),
-    0 0 32px rgba(0,0,0,.55),
-    0 0 26px rgba(255,190,160,.50),
-    0 0 80px rgba(255,140,150,.34),
-    0 0 170px rgba(255,110,140,.22);
+#vine .leaf{fill:url(#leafGrad); opacity:0; transform-box:fill-box; transform-origin:0% 50%}
+#vine .tip{fill:#fff6ea; opacity:0;
+  filter:drop-shadow(0 0 8px rgba(255,200,160,.95)) drop-shadow(0 0 20px rgba(255,140,150,.7))}
+#nameWrap.show .ink{animation:vineDraw 5.6s cubic-bezier(.32,0,.22,1) forwards}
+#nameWrap.show .tip{animation:vineTip 5.6s cubic-bezier(.32,0,.22,1) forwards,
+                              vineTipOut .7s ease 5.2s forwards}
+#nameWrap.show .leaf{animation:vineLeaf .9s ease forwards}
+#nameWrap.show .l1{animation-delay:1.5s}
+#nameWrap.show .l2{animation-delay:2.3s}
+@keyframes vineDraw{to{stroke-dashoffset:0}}
+@keyframes vineTip{from{opacity:1; offset-distance:0%} to{opacity:1; offset-distance:100%}}
+@keyframes vineTipOut{to{opacity:0}}
+@keyframes vineLeaf{from{opacity:0; transform:scale(.2)} to{opacity:.85; transform:scale(1)}}
+/* if she has asked her phone to stop animating things, present it already written */
+@media (prefers-reduced-motion: reduce){
+  #nameWrap.show .ink{animation:none; stroke-dashoffset:0}
+  #nameWrap.show .tip{display:none}
+  #nameWrap.show .leaf{animation:none; opacity:.85}
 }
 .intro-name{
   font-family:'Great Vibes', cursive; font-size:clamp(56px, 11vw, 110px);
@@ -108,7 +117,26 @@ body{
 <div id="petals"></div>
 
 <div id="nameWrap">
-  <h1 id="name">Amy</h1>
+  <svg id="vine" viewBox="0 0 620 330" role="img" aria-label="Amy">
+    <defs>
+      <linearGradient id="vineGrad" gradientUnits="userSpaceOnUse" x1="300" y1="0" x2="300" y2="215">
+        <stop offset="0"   stop-color="#3f6b32"/>
+        <stop offset=".30" stop-color="#7ea959"/>
+        <stop offset=".52" stop-color="#d6e7b4"/>
+        <stop offset=".72" stop-color="#fff3ea"/>
+        <stop offset="1"   stop-color="#ffd9dc"/>
+      </linearGradient>
+      <linearGradient id="leafGrad" x1="0" y1="0" x2="1" y2="1">
+        <stop offset="0" stop-color="#5d8f42"/><stop offset="1" stop-color="#2f5227"/>
+      </linearGradient>
+    </defs>
+    <!-- placement sits on the group: a CSS transform on the leaf itself would
+         otherwise clobber a transform attribute on the same node -->
+    <g transform="translate(288,58) rotate(38)"><path class="leaf l1" d="M0 0 C 12 -10, 32 -8, 40 2 C 29 12, 9 11, 0 0 Z"/></g>
+    <g transform="translate(243,97) rotate(196)"><path class="leaf l2" d="M0 0 C 11 -9, 29 -7, 36 2 C 26 11, 8 10, 0 0 Z"/></g>
+    <path id="vinePath" class="ink"/>
+    <circle id="vineTip" class="tip" r="5"/>
+  </svg>
 </div>
 
 <div id="fallback">
@@ -430,13 +458,19 @@ void main(){
   // Back off far enough that the bloom fits BOTH ways. The vertical field of
   // view is fixed, so on a tall phone it is the horizontal one that clips --
   // solve for each and take whichever needs more room.
-  float fit = 1.16;                               // half-extent we want in frame
+  // On a tall phone the horizontal field is the tight one and there is plenty
+  // of room below the bloom. On a wide screen the vertical field binds, so ask
+  // for more room there too -- otherwise the flower fills the height and her
+  // name ends up sitting on the petals instead of below them.
+  float fit = mix(1.30, 1.92, smoothstep(0.75, 1.40, aspect));
   float cdV = fit*1.55;                           // to fit top to bottom
   float cdH = fit*1.55/max(aspect, 0.34);         // to fit side to side
   float cd  = max(cdV, cdH);
-  // Aim at the heart of the bloom: that puts it dead centre, which is where
-  // her name goes, and lifts the whole flower to sit well in the frame.
-  vec3 ta = vec3(0.0, uP1.z*0.09, 0.0);
+  // Aim below the flower so the bloom sits high in the frame and its stem runs
+  // down into the lower third, where her name writes itself. A wide screen has
+  // less headroom, so lift it further there.
+  float lift = mix(0.46, 1.15, smoothstep(0.75, 1.40, aspect));
+  vec3 ta = vec3(0.0, -uP1.z*lift, 0.0);
   vec3 ro = ta + vec3(cd*cos(el)*sin(an), cd*sin(el), cd*cos(el)*cos(an));
   vec3 fw = normalize(ta - ro);
   vec3 rt = normalize(cross(fw, vec3(0.0,1.0,0.0)));
@@ -962,12 +996,42 @@ void main(){
     if(progPost) allocTarget();
   }
   var nameWrapEl = document.getElementById('nameWrap');
-  // The shader aims the camera straight at the heart of the flower (ta), so the
-  // heart lands dead centre by construction and her name just goes there. No
-  // projection to keep in sync with the shader -- it cannot drift.
-  function placeName(){
-    nameWrapEl.style.top = '50%';
-  }
+
+  // The name as one continuous pen stroke: the stem comes down out of the
+  // flower, sprouts a couple of leaves, and writes itself into "Amy".
+  (function(){
+    var D = [
+      "M 300 0 C 302 46, 274 86, 230 102 C 204 112, 180 110, 168 112",
+      "C 128 116, 100 148, 102 180 C 104 210, 140 224, 168 215 C 192 207, 203 180, 203 150",
+      "C 204 170, 206 195, 209 214",
+      "C 215 230, 229 223, 244 214",
+      "C 248 152, 282 146, 288 214",
+      "C 293 152, 327 146, 333 214",
+      "C 338 152, 372 146, 378 214",
+      "C 383 226, 390 221, 398 214",
+      "C 402 156, 414 147, 428 190",
+      "C 438 220, 450 176, 456 150",
+      "C 468 220, 452 290, 410 282 C 382 276, 390 246, 428 254"
+    ].join(" ");
+    try{
+      var vp = document.getElementById('vinePath');
+      vp.setAttribute('d', D);
+      var L = vp.getTotalLength();          // measured, so edits to D just work
+      // a custom property, NOT the real dash properties: setting those inline
+      // would outrank the stylesheet and break the reduced-motion fallback
+      vp.style.setProperty('--len', L);
+      var tp = document.getElementById('vineTip');
+      if(CSS && CSS.supports && CSS.supports('offset-path', 'path("M0 0 L1 1")')){
+        tp.style.offsetPath = 'path("' + D + '")';
+        tp.style.offsetRotate = '0deg';
+      } else {
+        tp.style.display = 'none';          // no travelling tip; the draw carries it
+      }
+    }catch(e){}
+  })();
+  // The name is anchored to the bottom of the frame in CSS, below the bloom,
+  // so there is no projection to keep in sync with the shader.
+  function placeName(){}
   addEventListener('resize', function(){ resize(); placeName(); });
   if(window.visualViewport) visualViewport.addEventListener('resize', function(){ resize(); placeName(); });
   resize(); placeName();

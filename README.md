@@ -51,8 +51,29 @@ A minute or two later it is live at **https://jrigholman.github.io/Tulips/**
 | `?check=1` | Show a "notify sent ✓ / FAILED ✗" toast |
 | `?still=1` | Render one frame and stop; also suppresses notifications |
 
+## Her name, written by the stem
+
+The name is not type. It is a single continuous monoline path (`#vinePath` in
+`index.html`) that **draws itself on**, animated by `stroke-dashoffset`. It
+starts stem-green where it comes down out of the flower, sprouts two small
+leaves, and warms to ivory as it becomes writing — so the stem appears to grow
+into her name.
+
+This is deliberately not left to the video model. Text is the weakest thing
+these models do, and asking for cursive lettering *through an organic morph* is
+the worst case: you get "Arny", warped glyphs, or a squiggle, at full price per
+attempt. A vector path is legible every time, identical across all ten clips,
+free, and can be timed to the bloom.
+
+The path's length is measured with `getTotalLength()` and published as the
+`--len` custom property, so editing the path data just works. It must be a
+custom property and not an inline `stroke-dashoffset` — inline styles would
+outrank the stylesheet and silently break the reduced-motion fallback, which
+presents the name already written.
+
+To change the name you have to redraw the path. It lives in one array of bezier
+segments near `vinePath`, with the pen starting above the "A".
+
 ## Personalize
 
-The name lives in `#name` and in the fallback section of `index.html`. It is
-placed at the exact centre of the frame, which is where the shader aims the
-camera — the heart of the bloom — so it cannot drift out of sync.
+The fallback screen's name is plain text in the `.intro-name` block.
