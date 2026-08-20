@@ -12,9 +12,19 @@ There are two ways it can draw that flower, and it picks the best one available:
 Each rung falls through to the next on its own, so `flowers/` can be empty (or
 half full) and the page still works. See `flowers/README.md` to add clips.
 
-**A different flower every visit.** One parameterised bloom drives 13 species
-across four petal architectures, so each time she opens the link she gets a
-different flower — and never the same one twice in a row.
+**One flower per day.** Every time she opens the link on a given day she gets
+the same flower; the next day she opens it, she gets the next one along.
+
+The rotation steps forward per *new day* rather than keying straight off the
+date, so she walks the whole set in order even if she skips days — she never
+misses a flower. The day rolls over at **her own local midnight**, not UTC,
+which matters because she is hours ahead. With no stored state (cleared
+storage, private browsing, a new device) it falls back to deriving the index
+from the date itself, so it still varies and still holds for a whole day.
+
+The procedural bloom's shape and colour jitter is seeded from the day too, so
+her morning look and her evening look are the identical flower, not just the
+same species.
 
 | Architecture | Species |
 |---|---|
@@ -42,7 +52,8 @@ A minute or two later it is live at **https://jrigholman.github.io/Tulips/**
 |---|---|
 | `?for=NAME` | Tags the visit for analytics, and names the recipient in the phone buzz |
 | `?f=0..12` | Force a specific procedural species (index into the table above) |
-| `?v=0..9` | Force a specific filmed clip |
+| `?v=0..5` | Force a specific filmed clip |
+| `?day=N` | Shift the day counter by N, to check the rotation without waiting |
 | `?novideo=1` | Skip the clips entirely and render procedurally |
 | `?t=SECONDS` | Jump to a point in the bloom timeline (negative values show the closed bud) |
 | `?debug=1` | On-screen readout: species, frame time, quality tier, canvas size, GPU |

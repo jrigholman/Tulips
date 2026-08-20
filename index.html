@@ -581,6 +581,38 @@ void main(){
   var params0 = new URLSearchParams(location.search);
 
   // -------------------------------------------------------------------------
+  // One flower per day. Every time she opens it on a given day she gets the
+  // same flower; the next day she opens it, she gets the next one along.
+  // -------------------------------------------------------------------------
+
+  // Her local day, not UTC -- "tomorrow" has to mean tomorrow where she is,
+  // and she is many hours ahead. Counts whole days since the epoch, rolling
+  // over at her own midnight.
+  function dayIndex(){
+    var now = new Date();
+    var shift = parseInt(params0.get('day'), 10);          // dev: jump days
+    var d = Math.floor((now.getTime() - now.getTimezoneOffset()*60000) / 86400000);
+    return d + (isNaN(shift) ? 0 : shift);
+  }
+
+  // Steps one along per new day rather than keying straight off the date, so
+  // she walks the whole set in order even if she skips days. With no stored
+  // state (cleared storage, private browsing, a new device) it falls back to
+  // the date itself, which still varies and still holds for a whole day.
+  function pickForToday(len, storeKey){
+    var day = dayIndex();
+    var idx = ((day % len) + len) % len;
+    try{
+      var st = JSON.parse(localStorage.getItem(storeKey) || 'null');
+      if(st && typeof st.d === 'number' && typeof st.i === 'number' && st.i < len){
+        idx = (st.d === day) ? st.i : (((st.i + 1) % len) + len) % len;
+      }
+      localStorage.setItem(storeKey, JSON.stringify({d: day, i: idx}));
+    }catch(e){}
+    return idx;
+  }
+
+  // -------------------------------------------------------------------------
   // Which flower she gets. One parameterised bloom drives all of these; a
   // species is just a bundle of numbers, so every visit can be a new flower.
   //   arch 0 dense spiral | 1 sculptural few | 2 flat rays | 3 simple five
@@ -620,23 +652,26 @@ void main(){
      a:[0.98,0.96,0.95], b:[1.00,1.00,1.00], c:[0.10,0.08,0.12]}
   ];
 
-  // pick one, but never the same flower she saw last time
-  var flower, flowerSeed = Math.random();
+  // one species per day, on the same rotation as the clips
+  var flower, flowerSeed;
   (function(){
     var forced = parseInt(params0.get('f'), 10);
-    if(!isNaN(forced) && forced >= 0 && forced < SPECIES.length){ flower = SPECIES[forced]; return; }
-    var last = -1;
-    try{ last = parseInt(localStorage.getItem('tulips_lastFlower') || '-1', 10); }catch(e){}
-    var pool = [];
-    for(var i=0;i<SPECIES.length;i++) if(i !== last) pool.push(i);
-    var pick = pool[(Math.random()*pool.length)|0];
-    try{ localStorage.setItem('tulips_lastFlower', String(pick)); }catch(e){}
-    flower = SPECIES[pick];
+    var idx = (!isNaN(forced) && forced >= 0 && forced < SPECIES.length)
+              ? forced : pickForToday(SPECIES.length, 'tulips_dayFlower');
+    flower = SPECIES[idx];
+    // the per-visit jitter is seeded from the day too, so the bloom she sees
+    // in the morning is the same one she sees again that evening
+    flowerSeed = ((dayIndex() * 2654435761) % 1000) / 1000;
   })();
 
   // and jitter it, so even the same species is never quite the same bloom twice
   var fj = (function(){
-    function r(){ return Math.random(); }
+    // Seeded off the day rather than Math.random, so every open on the same day
+    // is the identical bloom -- otherwise the species would hold but the petal
+    // count and colour would quietly shift between her morning and evening look.
+    var seed = (dayIndex() * 16807) % 2147483647;
+    if(seed <= 0) seed += 2147483646;
+    function r(){ seed = (seed * 16807) % 2147483647; return (seed - 1) / 2147483646; }
     var warm = (r()*2-1);                       // shifts the whole flower warm/cool
     function tint(c){
       return [Math.min(1, c[0]*(1+0.10*warm)),
@@ -1118,13 +1153,7 @@ void main(){
   function pickClip(){
     var forced = parseInt(params.get('v'), 10);
     if(!isNaN(forced) && forced >= 0 && forced < CLIPS.length) return CLIPS[forced];
-    var last = -1;
-    try{ last = parseInt(localStorage.getItem('tulips_lastClip') || '-1', 10); }catch(e){}
-    var pool = [];
-    for(var i=0;i<CLIPS.length;i++) if(i !== last) pool.push(i);
-    var pick = pool[(Math.random()*pool.length)|0];
-    try{ localStorage.setItem('tulips_lastClip', String(pick)); }catch(e){}
-    return CLIPS[pick];
+    return CLIPS[pickForToday(CLIPS.length, 'tulips_dayClip')];
   }
 
   function tryClip(){
