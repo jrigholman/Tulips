@@ -49,41 +49,58 @@ body{
 /* once the bloom has finished, drift almost imperceptibly so it is not a freeze-frame */
 #clip.settle{transform:scale(1.035); transition:opacity 1.4s ease, transform 34s linear}
 
-/* ---- her name, written by the stem itself ---- */
-/* A single monoline path that draws itself on: it starts stem-green where it
-   comes down out of the flower and warms to ivory as it becomes writing. */
+/* ---- her name ---- */
+/* The trick to making type sit INSIDE photoreal footage rather than on top of
+   it is to make it add light instead of covering pixels. mix-blend-mode:screen
+   means the letters bloom into any petal they cross and stay full strength over
+   the black. Three stacked layers give them the same key light as the flower:
+   a wide veil of glare, a warm rim on the upper-left of each stroke, and an
+   ivory core softened just enough that it does not read as razor-sharp vector
+   sitting on soft video.
+   Note there is deliberately NO opacity animation here -- opacity would
+   isolate this element into its own group and kill the blend. The reveal is
+   done with a mask instead. */
 #nameWrap{
-  position:fixed; left:0; right:0; bottom:9vh; top:auto; text-align:center;
+  position:fixed; left:0; right:0; bottom:11vh; top:auto; text-align:center;
   pointer-events:none; z-index:3;
-  opacity:0; transition:opacity .8s ease;
+  mix-blend-mode:screen;
+  --m:linear-gradient(96deg, transparent 0 38%, #000 62% 100%);
+  -webkit-mask-image:var(--m);    mask-image:var(--m);
+  -webkit-mask-size:260% 100%;    mask-size:260% 100%;
+  -webkit-mask-repeat:no-repeat;  mask-repeat:no-repeat;
+  -webkit-mask-position:0% 0;     mask-position:0% 0;
 }
-#nameWrap.show{opacity:1}
-#vine{width:min(88vw, 560px); height:auto; overflow:visible; display:block; margin:0 auto}
-@media (orientation:landscape){ #vine{width:min(42vw, 460px)} }
-#vine .ink{
-  fill:none; stroke:url(#vineGrad); stroke-width:7;
-  stroke-linecap:round; stroke-linejoin:round;
-  stroke-dasharray:var(--len, 1320); stroke-dashoffset:var(--len, 1320);
-  filter:drop-shadow(0 0 7px rgba(255,190,150,.45)) drop-shadow(0 0 22px rgba(255,120,140,.26));
+#nameStack{position:relative; display:inline-block}
+#nameStack span{
+  display:block;
+  font-family:'Great Vibes','Snell Roundhand',cursive; font-weight:400;
+  font-size:clamp(62px, 15vw, 138px); line-height:1.18; white-space:nowrap;
 }
-#vine .leaf{fill:url(#leafGrad); opacity:0; transform-box:fill-box; transform-origin:0% 50%}
-#vine .tip{fill:#fff6ea; opacity:0;
-  filter:drop-shadow(0 0 8px rgba(255,200,160,.95)) drop-shadow(0 0 20px rgba(255,140,150,.7))}
-#nameWrap.show .ink{animation:vineDraw 5.6s cubic-bezier(.32,0,.22,1) forwards}
-#nameWrap.show .tip{animation:vineTip 5.6s cubic-bezier(.32,0,.22,1) forwards,
-                              vineTipOut .7s ease 5.2s forwards}
-#nameWrap.show .leaf{animation:vineLeaf .9s ease forwards}
-#nameWrap.show .l1{animation-delay:1.5s}
-#nameWrap.show .l2{animation-delay:2.3s}
-@keyframes vineDraw{to{stroke-dashoffset:0}}
-@keyframes vineTip{from{opacity:1; offset-distance:0%} to{opacity:1; offset-distance:100%}}
-@keyframes vineTipOut{to{opacity:0}}
-@keyframes vineLeaf{from{opacity:0; transform:scale(.2)} to{opacity:.85; transform:scale(1)}}
-/* if she has asked her phone to stop animating things, present it already written */
+#nameStack .rim{
+  position:absolute; left:0; right:0; top:0;
+  color:#ffcf9e; filter:blur(1px); transform:translate(-1.5px,-1.5px); opacity:.7;
+}
+/* glare via text-shadow, not a blurred duplicate: a blurred text block lifts a
+   faintly rectangular field out of the black, whereas shadows follow the glyphs */
+#nameStack .core{
+  color:#fff6ec; position:relative; filter:blur(.3px);
+  text-shadow:
+    0 0 10px rgba(255,214,178,.55),
+    0 0 30px rgba(255,170,130,.36),
+    0 0 74px rgba(255,130,120,.20);
+}
+/* a wide feathered sweep, angled to the script's own slant, so the letters
+   condense out of the light rather than being wiped on */
+#nameWrap.show{
+  animation:nameIn 4.6s cubic-bezier(.33,0,.28,1) forwards,
+            nameSettle 34s linear 4.6s forwards;
+}
+@keyframes nameIn{to{-webkit-mask-position:100% 0; mask-position:100% 0}}
+@keyframes nameSettle{to{transform:scale(1.014)}}
+/* if she has asked her phone to stop animating things, present it arrived */
 @media (prefers-reduced-motion: reduce){
-  #nameWrap.show .ink{animation:none; stroke-dashoffset:0}
-  #nameWrap.show .tip{display:none}
-  #nameWrap.show .leaf{animation:none; opacity:.85}
+  #nameWrap{-webkit-mask-position:100% 0; mask-position:100% 0}
+  #nameWrap.show{animation:none}
 }
 .intro-name{
   font-family:'Great Vibes', cursive; font-size:clamp(56px, 11vw, 110px);
@@ -117,26 +134,10 @@ body{
 <div id="petals"></div>
 
 <div id="nameWrap">
-  <svg id="vine" viewBox="0 0 620 330" role="img" aria-label="Amy">
-    <defs>
-      <linearGradient id="vineGrad" gradientUnits="userSpaceOnUse" x1="300" y1="0" x2="300" y2="215">
-        <stop offset="0"   stop-color="#3f6b32"/>
-        <stop offset=".30" stop-color="#7ea959"/>
-        <stop offset=".52" stop-color="#d6e7b4"/>
-        <stop offset=".72" stop-color="#fff3ea"/>
-        <stop offset="1"   stop-color="#ffd9dc"/>
-      </linearGradient>
-      <linearGradient id="leafGrad" x1="0" y1="0" x2="1" y2="1">
-        <stop offset="0" stop-color="#5d8f42"/><stop offset="1" stop-color="#2f5227"/>
-      </linearGradient>
-    </defs>
-    <!-- placement sits on the group: a CSS transform on the leaf itself would
-         otherwise clobber a transform attribute on the same node -->
-    <g transform="translate(288,58) rotate(38)"><path class="leaf l1" d="M0 0 C 12 -10, 32 -8, 40 2 C 29 12, 9 11, 0 0 Z"/></g>
-    <g transform="translate(243,97) rotate(196)"><path class="leaf l2" d="M0 0 C 11 -9, 29 -7, 36 2 C 26 11, 8 10, 0 0 Z"/></g>
-    <path id="vinePath" class="ink"/>
-    <circle id="vineTip" class="tip" r="5"/>
-  </svg>
+  <span id="nameStack">
+    <span class="rim" aria-hidden="true">Amy</span>
+    <span class="core">Amy</span>
+  </span>
 </div>
 
 <div id="fallback">
@@ -997,38 +998,9 @@ void main(){
   }
   var nameWrapEl = document.getElementById('nameWrap');
 
-  // The name as one continuous pen stroke: the stem comes down out of the
-  // flower, sprouts a couple of leaves, and writes itself into "Amy".
-  (function(){
-    var D = [
-      "M 300 0 C 302 46, 274 86, 230 102 C 204 112, 180 110, 168 112",
-      "C 128 116, 100 148, 102 180 C 104 210, 140 224, 168 215 C 192 207, 203 180, 203 150",
-      "C 204 170, 206 195, 209 214",
-      "C 215 230, 229 223, 244 214",
-      "C 248 152, 282 146, 288 214",
-      "C 293 152, 327 146, 333 214",
-      "C 338 152, 372 146, 378 214",
-      "C 383 226, 390 221, 398 214",
-      "C 402 156, 414 147, 428 190",
-      "C 438 220, 450 176, 456 150",
-      "C 468 220, 452 290, 410 282 C 382 276, 390 246, 428 254"
-    ].join(" ");
-    try{
-      var vp = document.getElementById('vinePath');
-      vp.setAttribute('d', D);
-      var L = vp.getTotalLength();          // measured, so edits to D just work
-      // a custom property, NOT the real dash properties: setting those inline
-      // would outrank the stylesheet and break the reduced-motion fallback
-      vp.style.setProperty('--len', L);
-      var tp = document.getElementById('vineTip');
-      if(CSS && CSS.supports && CSS.supports('offset-path', 'path("M0 0 L1 1")')){
-        tp.style.offsetPath = 'path("' + D + '")';
-        tp.style.offsetRotate = '0deg';
-      } else {
-        tp.style.display = 'none';          // no travelling tip; the draw carries it
-      }
-    }catch(e){}
-  })();
+  // Plain type, not vector letterforms: a real calligraphic face has the
+  // thick-thin modulation that a monoline stroke can never fake, and it holds
+  // up next to photoreal petals in a way hand-authored beziers did not.
   // The name is anchored to the bottom of the frame in CSS, below the bloom,
   // so there is no projection to keep in sync with the shader.
   function placeName(){}

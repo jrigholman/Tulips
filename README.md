@@ -51,28 +51,35 @@ A minute or two later it is live at **https://jrigholman.github.io/Tulips/**
 | `?check=1` | Show a "notify sent ✓ / FAILED ✗" toast |
 | `?still=1` | Render one frame and stop; also suppresses notifications |
 
-## Her name, written by the stem
+## Her name
 
-The name is not type. It is a single continuous monoline path (`#vinePath` in
-`index.html`) that **draws itself on**, animated by `stroke-dashoffset`. It
-starts stem-green where it comes down out of the flower, sprouts two small
-leaves, and warms to ivory as it becomes writing — so the stem appears to grow
-into her name.
+Set in Great Vibes (embedded as base64, so no network request), in three
+stacked layers over a `mix-blend-mode: screen` wrapper.
 
-This is deliberately not left to the video model. Text is the weakest thing
-these models do, and asking for cursive lettering *through an organic morph* is
-the worst case: you get "Arny", warped glyphs, or a squiggle, at full price per
-attempt. A vector path is legible every time, identical across all ten clips,
-free, and can be timed to the bloom.
+The blend mode is the whole trick. Type that merely sits *on* photoreal
+footage always reads as a caption; type that **adds light** reads as part of
+the same photograph. Over the black it stays full strength, and where it
+crosses a stem or a petal it blooms into it.
 
-The path's length is measured with `getTotalLength()` and published as the
-`--len` custom property, so editing the path data just works. It must be a
-custom property and not an inline `stroke-dashoffset` — inline styles would
-outrank the stylesheet and silently break the reduced-motion fallback, which
-presents the name already written.
+The three layers give the letters the same key light as the flower: a warm rim
+offset up-left, an ivory core, and glare via `text-shadow`. The glare is
+deliberately `text-shadow` and not a blurred duplicate — a blurred text block
+lifts a faintly rectangular field out of the black, whereas shadows follow the
+glyphs.
 
-To change the name you have to redraw the path. It lives in one array of bezier
-segments near `vinePath`, with the pen starting above the "A".
+Two things not to "tidy up":
+
+- **No opacity animation on `#nameWrap`.** Opacity would isolate it into its
+  own group and kill the blend against the video. The reveal is a masked sweep
+  instead — `mask-position` animated across an oversized feathered gradient,
+  angled to the script's slant, so the letters condense out of the light.
+- **Reduced motion** presents it already arrived. Getting this wrong once made
+  the name invisible to anyone with Reduce Motion enabled.
+
+An earlier version drew the name as a self-animating monoline vine, so the stem
+appeared to grow into her handwriting. It read as neon wire next to photoreal
+petals — a uniform-width stroke has none of the thick-thin modulation real
+calligraphy does, and hand-authored beziers look crude beside a real typeface.
 
 ## Personalize
 
